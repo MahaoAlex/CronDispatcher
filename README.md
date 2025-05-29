@@ -1,4 +1,4 @@
-# CronDispatcher
+# CronDispatcher Design Proposal
 
 ## 功能概述
 
@@ -41,9 +41,13 @@ metadata:
 ### 任务清理
 
 1. 基于CCI2.0的配额规则，需要对成功运行结束（Succeed）的任务Pod和任务执行失败的Pod进行清理。
-2. 清理规则可以通过名为`cron-dispatcher-gc-policy`的configmap进行配置，默认的规则为保留最近成功3个、失败的最多保留3个，增加Pod标识。
+2. Pod清理按照任务Task维度进行配置，通过名为`cron-dispatcher-gc-policy`的configmap进行配置。
+3. `cron-dispatcher-gc-policy`支持Task维度配置+全局默认规则的结构, Task维度通过taskSelector字段匹配 
+2. 全局默认规则通过Global部分进行配置，默认的规则为保留最近成功3个、失败的最多保留3个，增加Pod标识。
 3. 清理过程中会统一基于Pod的Label标签进行判断，判断`app.kubernetes.io/managed-by`进行统一判断
 4. 清理过程中的保留，都是按照时间排序，保留时间最近的3个
+5. 支持通过环境变量GC_DRY_RUN=true开启模拟清理，仅输出待删除 Pod 列表而不执行实际删除操作。
+6. 支持分批删除机制，通过环境变量GC_BATCH_SIZE配置单词清理的Pod数量，默认每次最多删除50个Pod，避免API Server压力过大。
 
 ## 系统关键输入
 
@@ -181,20 +185,21 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cron-dispatcher-gc-policy
-  namespace: cv-cd-generators  # 与任务配置保持同一命名空间
+  name: cron-dispatcher-gc-policy
 data:
-  gc-policy.yaml: |
-    # 垃圾回收策略配置
-    retentionPolicy:
-      successPods:
-        maxRetained: 3           # 保留最近成功的3个Pod
-        sortBy: creationTimestamp # 按创建时间排序（最新的保留）
-        order: descending        # 降序排列（最新的在前）
-      failedPods:
-        maxRetained: 3           # 保留最近失败的3个Pod
-        sortBy: creationTimestamp # 按创建时间排序
-        order: descending        # 降序排列
+  gc-policy.yaml: |
+    global:  # 全局默认规则（未匹配到Task时生效）
+      success: 3  # 成功任务保留数量
+      failure: 3  # 失败任务保留数量
+    tasks:  # Task维度配置（优先级高于全局）
+      - taskSelector:  # Label选择器匹配特定Task
+          cron-dispatcher.io/task-name: "your-task-name-A"  # 任务名称
+        success: 5  # 该Task成功任务保留5个
+        failure: 2  # 该Task失败任务保留2个
+      - taskSelector:
+          cron-dispatcher.io/task-name: "your-task-name-B"  # 任务名称
+        success: 10  # 保留10个成功任务
+        failure: 5  # 保留5个失败任务
     labelSelector:
       matchLabels:
         app.kubernetes.io/managed-by: CronDispatcher # 筛选由CronDispatcher管理的Pod
