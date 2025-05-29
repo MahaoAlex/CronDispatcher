@@ -9,17 +9,13 @@ import sys
 import time
 import logging
 import yaml
-import uuid
 import subprocess
-from datetime import datetime
 from typing import Dict, List, Optional
-from pathlib import Path
 
-import pytz
-from kubernetes import client, config
 from crontab import CronTab
 from croniter import croniter
-from flask import Flask, jsonify
+from pod_cleaner import PodCleaner
+from cci_auth_manager import CCIAuthManager
 
 # Configure logging
 logging.basicConfig(
@@ -37,62 +33,76 @@ class CronDispatcher:
     
     def __init__(self):
         self.namespace = os.getenv('NAMESPACE', 'default')
-        self.timezone = os.getenv('CRON_TIMEZONE', 'Africa/Johannesburg')
-        self.config_map_name = 'cron-dispatcher-config'
-        self.gc_policy_map_name = 'cron-dispatcher-gc-policy'
+        self.timezone = os.getenv('CRON_TIMEZONE', 'UTC')
+        self.region = os.getenv('CCI_REGION', 'af-south-1')
+        
+        # Configuration file paths (mounted from ConfigMaps)
+        self.config_dir = '/etc/cron-dispatcher-config'
+        self.gc_policy_dir = '/etc/cron-dispatcher-gc-policy'
+        
+        # Configuration files
+        self.tasks_config_file = os.path.join(self.config_dir, 'tasks.yaml')
+        self.gc_policy_file = os.path.join(self.gc_policy_dir, 'gc-policy.yaml')
         
         # Garbage Collection configuration
         self.gc_dry_run = os.getenv('GC_DRY_RUN', 'false').lower() == 'true'
         self.gc_batch_size = int(os.getenv('GC_BATCH_SIZE', '50'))
         
-        # Initialize Kubernetes client
-        try:
-            config.load_incluster_config()
-        except:
-            try:
-                config.load_kube_config()
-            except:
-                logger.error("Unable to load Kubernetes configuration")
-                sys.exit(1)
+        # Cleanup timing
+        self.last_cleanup_time = 0
+        self.cleanup_interval_seconds = 300  # Default 5 minutes
         
-        self.k8s_client = client.CoreV1Api()
+        # Initialize crontab
         self.cron = CronTab(user='root')
         
-        # Set timezone
-        self.tz = pytz.timezone(self.timezone)
+        # Initialize Pod Cleaner
+        self.pod_cleaner = PodCleaner(
+            namespace=self.namespace,
+            gc_dry_run=self.gc_dry_run,
+            gc_batch_size=self.gc_batch_size
+        )
+        
+        # Initialize CCI Authentication Manager
+        self.cci_auth = self._initialize_cci_auth()
         
         logger.info(f"CronDispatcher initialized - Namespace: {self.namespace}, Timezone: {self.timezone}")
+        logger.info(f"Configuration directory: {self.config_dir}")
         logger.info(f"Garbage Collection - Dry Run: {self.gc_dry_run}, Batch Size: {self.gc_batch_size}")
+        logger.info(f"CCI Region: {self.region}")
     
-    def load_config_from_configmap(self) -> Optional[List[Dict]]:
-        """Load task configuration from ConfigMap"""
+    def _initialize_cci_auth(self) -> Optional[CCIAuthManager]:
+        """Initialize CCI Authentication Manager"""
         try:
-            config_map = self.k8s_client.read_namespaced_config_map(
-                name=self.config_map_name,
-                namespace=self.namespace
-            )
-            
-            tasks_yaml = config_map.data.get('tasks.yaml', '')
-            if not tasks_yaml:
-                logger.warning("tasks.yaml configuration not found in ConfigMap")
+            cci_auth = CCIAuthManager()
+            logger.info("CCI Authentication Manager initialized")
+            return cci_auth
+        except Exception as e:
+            logger.error(f"Failed to initialize CCI Authentication Manager: {e}")
+            return None
+    
+    def load_config_from_file(self) -> Optional[List[Dict]]:
+        """Load task configuration from mounted file"""
+        try:
+            if not os.path.exists(self.tasks_config_file):
+                logger.warning(f"Task configuration file not found: {self.tasks_config_file}")
                 return None
             
-            tasks = yaml.safe_load(tasks_yaml)
-            logger.info(f"Successfully loaded {len(tasks)} task configurations")
+            with open(self.tasks_config_file, 'r', encoding='utf-8') as f:
+                tasks = yaml.safe_load(f)
+            
+            if not tasks:
+                logger.warning("No tasks found in configuration file")
+                return None
+            
+            logger.info(f"Successfully loaded {len(tasks)} task configurations from {self.tasks_config_file}")
             return tasks
             
-        except client.exceptions.ApiException as e:
-            if e.status == 404:
-                logger.warning(f"ConfigMap {self.config_map_name} does not exist")
-            else:
-                logger.error(f"Failed to read ConfigMap: {e}")
-            return None
         except Exception as e:
-            logger.error(f"Failed to parse task configuration: {e}")
+            logger.error(f"Failed to load task configuration: {e}")
             return None
     
     def load_gc_policy(self) -> Dict:
-        """Load garbage collection policy"""
+        """Load garbage collection policy from mounted file"""
         default_policy = {
             'global': {
                 'success': 3,
@@ -104,29 +114,23 @@ class CronDispatcher:
                     'app.kubernetes.io/managed-by': 'CronDispatcher'
                 }
             },
-            'cleanupInterval': '60m',
-            'timeToLive': '1h'
+            'cleanupInterval': '5m',
         }
         
         try:
-            config_map = self.k8s_client.read_namespaced_config_map(
-                name=self.gc_policy_map_name,
-                namespace=self.namespace
-            )
+            if not os.path.exists(self.gc_policy_file):
+                logger.info(f"Garbage collection policy file not found: {self.gc_policy_file}, using default policy")
+                return default_policy
             
-            policy_yaml = config_map.data.get('gc-policy.yaml', '')
-            if policy_yaml:
-                policy = yaml.safe_load(policy_yaml)
-                logger.info("Successfully loaded garbage collection policy")
+            with open(self.gc_policy_file, 'r', encoding='utf-8') as f:
+                policy = yaml.safe_load(f)
+            
+            if policy:
+                logger.info(f"Successfully loaded garbage collection policy from {self.gc_policy_file}")
                 return policy
             
-        except client.exceptions.ApiException as e:
-            if e.status == 404:
-                logger.info("Using default garbage collection policy")
-            else:
-                logger.warning(f"Failed to read garbage collection policy, using default: {e}")
         except Exception as e:
-            logger.warning(f"Failed to parse garbage collection policy, using default: {e}")
+            logger.warning(f"Failed to load garbage collection policy, using default: {e}")
         
         return default_policy
     
@@ -134,81 +138,36 @@ class CronDispatcher:
         """Validate cron expression"""
         try:
             # Convert Quartz format to standard cron format
-            parts = cron_expr.split()
-            if len(parts) == 6:  # Quartz format: second minute hour day month week
-                # Convert to standard format: minute hour day month week
-                standard_expr = f"{parts[1]} {parts[2]} {parts[3]} {parts[4]} {parts[5]}"
-            else:
-                standard_expr = cron_expr
-            
+            standard_expr = self._convert_quartz_to_cron(cron_expr)
             croniter(standard_expr)
             return True
         except Exception as e:
             logger.error(f"Invalid cron expression '{cron_expr}': {e}")
             return False
     
-    def convert_quartz_to_cron(self, quartz_expr: str) -> str:
+    def _convert_quartz_to_cron(self, quartz_expr: str) -> str:
         """Convert Quartz format cron expression to standard format"""
         parts = quartz_expr.split()
-        if len(parts) == 6:  # Quartz format
+        if len(parts) == 6:  # Quartz format: second minute hour day month week
             # Ignore seconds field, convert to standard 5-field format
             return f"{parts[1]} {parts[2]} {parts[3]} {parts[4]} {parts[5]}"
         return quartz_expr
     
-    def generate_pod_uuid(self) -> str:
-        """Generate 9-digit UUID"""
-        return str(uuid.uuid4()).replace('-', '')[:9]
-    
-    def create_pod_from_template(self, task_name: str, template_path: str) -> bool:
-        """Create Pod based on template"""
+    def validate_configmap_exists(self, configmap_name: str) -> bool:
+        """Validate that the specified ConfigMap exists in the current namespace"""
         try:
-            # Read Pod template
-            if not os.path.exists(template_path):
-                logger.error(f"Pod template file does not exist: {template_path}")
-                return False
-            
-            with open(template_path, 'r', encoding='utf-8') as f:
-                pod_template = yaml.safe_load(f)
-            
-            # Generate unique identifier
-            pod_uuid = self.generate_pod_uuid()
-            pod_name = f"{task_name}-{pod_uuid}"
-            
-            # Set Pod name and labels
-            pod_template['metadata']['name'] = pod_name
-            pod_template['metadata']['namespace'] = self.namespace
-            
-            # Add necessary labels
-            if 'labels' not in pod_template['metadata']:
-                pod_template['metadata']['labels'] = {}
-            
-            pod_template['metadata']['labels'].update({
-                'app.kubernetes.io/managed-by': 'CronDispatcher',
-                'cron-dispatcher.io/task-name': task_name,
-                'cron-dispatcher.io/instance': pod_name
-            })
-            
-            # Use ccictl to create Pod
-            temp_file = f"/tmp/pod-{pod_uuid}.yaml"
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                yaml.dump(pod_template, f)
-            
-            # Execute ccictl command
-            cmd = f"ccictl apply -f {temp_file}"
+            cmd = f"ccictl get configmap {configmap_name} -n {self.namespace}"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
-            # Clean up temporary file
-            os.remove(temp_file)
-            
             if result.returncode == 0:
-                logger.info(f"Successfully created Pod: {pod_name}")
+                logger.debug(f"ConfigMap {configmap_name} exists in namespace {self.namespace}")
                 return True
             else:
-                logger.error(f"Failed to create Pod: {result.stderr}")
+                logger.warning(f"ConfigMap {configmap_name} not found in namespace {self.namespace}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error occurred while creating Pod: {e}")
+            logger.error(f"Error checking ConfigMap {configmap_name}: {e}")
             return False
     
     def update_crontab(self, tasks: List[Dict]):
@@ -217,226 +176,204 @@ class CronDispatcher:
             # Remove existing CronDispatcher tasks
             self.cron.remove_all(comment='CronDispatcher')
             
+            active_tasks = 0
             for task in tasks:
-                name = task.get('name')
-                schedule = task.get('schedule')
-                template_path = task.get('podTemplatePath')
-                state = task.get('state', 'on').lower()
-                
-                # Skip disabled tasks
-                if state != 'on':
-                    logger.info(f"Skipping disabled task: {name}")
-                    continue
-                
-                # Validate required fields
-                if not all([name, schedule, template_path]):
-                    logger.warning(f"Incomplete task configuration, skipping: {name}")
-                    continue
-                
-                # Validate cron expression
-                if not self.validate_cron_expression(schedule):
-                    logger.warning(f"Skipping task with invalid cron expression: {name}")
-                    continue
-                
-                # Convert cron expression
-                standard_cron = self.convert_quartz_to_cron(schedule)
-                
-                # Create cron job
-                command = f"python3 /app/src/pod_creator.py {name} {template_path}"
-                job = self.cron.new(command=command, comment='CronDispatcher')
-                job.setall(standard_cron)
-                
-                logger.info(f"Added cron job: {name} - {standard_cron}")
+                if self._process_task(task):
+                    active_tasks += 1
             
-            # Write to crontab
+            # Write crontab
             self.cron.write()
-            logger.info("Crontab update completed")
+            logger.info(f"Crontab updated with {active_tasks} active tasks")
             
         except Exception as e:
             logger.error(f"Failed to update crontab: {e}")
     
-    def cleanup_pods(self):
-        """Clean up expired Pods with garbage collection"""
-        try:
-            gc_policy = self.load_gc_policy()
-            
-            # Get Pods managed by CronDispatcher
-            label_selector = 'app.kubernetes.io/managed-by=CronDispatcher'
-            pods = self.k8s_client.list_namespaced_pod(
-                namespace=self.namespace,
-                label_selector=label_selector
-            )
-            
-            # Group by task name
-            task_pods = {}
-            for pod in pods.items:
-                task_name = pod.metadata.labels.get('cron-dispatcher.io/task-name')
-                if task_name:
-                    if task_name not in task_pods:
-                        task_pods[task_name] = {'success': [], 'failed': []}
-                    
-                    if pod.status.phase == 'Succeeded':
-                        task_pods[task_name]['success'].append(pod)
-                    elif pod.status.phase == 'Failed':
-                        task_pods[task_name]['failed'].append(pod)
-            
-            # Clean up Pods for each task
-            total_deleted = 0
-            for task_name, pods_by_status in task_pods.items():
-                deleted_count = self._cleanup_task_pods(task_name, pods_by_status, gc_policy)
-                total_deleted += deleted_count
-                
-            logger.info(f"Garbage collection completed. Total pods processed for deletion: {total_deleted}")
-                
-        except Exception as e:
-            logger.error(f"Error occurred during garbage collection: {e}")
-    
-    def _cleanup_task_pods(self, task_name: str, pods_by_status: Dict, gc_policy: Dict) -> int:
-        """Clean up Pods for specific task"""
-        deleted_count = 0
+    def _process_task(self, task: Dict) -> bool:
+        """Process individual task and add to crontab if valid"""
+        name = task.get('name')
+        schedule = task.get('schedule')
+        configmap_name = task.get('podDefinitionConfigmap')
+        state = task.get('state', 'on').lower()
         
-        # Get retention policy for this task
-        task_policy = self._get_task_retention_policy(task_name, gc_policy)
-        
-        max_success = task_policy.get('success', 3)
-        max_failed = task_policy.get('failure', 3)
-        
-        # Clean up successful Pods
-        success_pods = sorted(
-            pods_by_status['success'],
-            key=lambda p: p.metadata.creation_timestamp,
-            reverse=True
-        )
-        
-        if len(success_pods) > max_success:
-            pods_to_delete = success_pods[max_success:]
-            deleted_count += self._delete_pods_batch(
-                pods_to_delete, 
-                f"Exceeds successful Pod retention limit ({max_success}) for task {task_name}"
-            )
-        
-        # Clean up failed Pods
-        failed_pods = sorted(
-            pods_by_status['failed'],
-            key=lambda p: p.metadata.creation_timestamp,
-            reverse=True
-        )
-        
-        if len(failed_pods) > max_failed:
-            pods_to_delete = failed_pods[max_failed:]
-            deleted_count += self._delete_pods_batch(
-                pods_to_delete,
-                f"Exceeds failed Pod retention limit ({max_failed}) for task {task_name}"
-            )
-        
-        return deleted_count
-    
-    def _get_task_retention_policy(self, task_name: str, gc_policy: Dict) -> Dict:
-        """Get retention policy for specific task"""
-        # Check task-specific policies first
-        for task_config in gc_policy.get('tasks', []):
-            task_selector = task_config.get('taskSelector', {})
-            if task_selector.get('cron-dispatcher.io/task-name') == task_name:
-                return {
-                    'success': task_config.get('success', 3),
-                    'failure': task_config.get('failure', 3)
-                }
-        
-        # Fall back to global policy
-        global_policy = gc_policy.get('global', {})
-        return {
-            'success': global_policy.get('success', 3),
-            'failure': global_policy.get('failure', 3)
-        }
-    
-    def _delete_pods_batch(self, pods_to_delete: List, reason: str) -> int:
-        """Delete Pods in batches"""
-        deleted_count = 0
-        
-        # Process in batches
-        for i in range(0, len(pods_to_delete), self.gc_batch_size):
-            batch = pods_to_delete[i:i + self.gc_batch_size]
-            
-            for pod in batch:
-                if self.gc_dry_run:
-                    logger.info(f"[DRY RUN] Would delete Pod {pod.metadata.name}: {reason}")
-                    deleted_count += 1
-                else:
-                    if self._delete_pod(pod, reason):
-                        deleted_count += 1
-            
-            # Small delay between batches to avoid API server pressure
-            if i + self.gc_batch_size < len(pods_to_delete):
-                time.sleep(1)
-        
-        return deleted_count
-    
-    def _delete_pod(self, pod, reason: str) -> bool:
-        """Delete Pod"""
-        try:
-            self.k8s_client.delete_namespaced_pod(
-                name=pod.metadata.name,
-                namespace=pod.metadata.namespace
-            )
-            logger.info(f"Deleted Pod {pod.metadata.name}: {reason}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete Pod {pod.metadata.name}: {e}")
+        # Skip disabled tasks
+        if state != 'on':
+            logger.info(f"Skipping disabled task: {name}")
             return False
+        
+        # Validate required fields
+        if not all([name, schedule, configmap_name]):
+            logger.warning(f"Incomplete task configuration, skipping: {name}")
+            return False
+        
+        # Validate cron expression
+        if not self.validate_cron_expression(schedule):
+            logger.warning(f"Skipping task with invalid cron expression: {name}")
+            return False
+        
+        # Validate ConfigMap exists
+        if not self.validate_configmap_exists(configmap_name):
+            logger.warning(f"Skipping task with non-existent ConfigMap: {name} -> {configmap_name}")
+            return False
+        
+        # Convert cron expression and create job
+        standard_cron = self._convert_quartz_to_cron(schedule)
+        command = f"python3 /app/src/pod_creator.py {name} {configmap_name}"
+        job = self.cron.new(command=command, comment='CronDispatcher')
+        job.setall(standard_cron)
+        
+        logger.info(f"Added cron job: {name} - {standard_cron} (ConfigMap: {configmap_name})")
+        return True
+    
+    def initialize_cci_authentication(self) -> bool:
+        """Initialize CCI authentication"""
+        if not self.cci_auth:
+            logger.warning("CCI Authentication Manager not available")
+            return False
+        
+        try:
+            if not self.cci_auth.load_credentials_from_env():
+                logger.error("Failed to load CCI credentials from environment")
+                return False
+            
+            if not self.cci_auth.configure_ccictl(region=self.region):
+                logger.error("Failed to configure ccictl")
+                return False
+            
+            logger.info("CCI authentication configured successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during CCI authentication initialization: {e}")
+            return False
+    
+    def watch_config_changes(self) -> bool:
+        """Check if configuration files have changed"""
+        try:
+            # Check task configuration file
+            if os.path.exists(self.tasks_config_file):
+                tasks_mtime = os.path.getmtime(self.tasks_config_file)
+                if not hasattr(self, 'last_tasks_mtime') or tasks_mtime > self.last_tasks_mtime:
+                    self.last_tasks_mtime = tasks_mtime
+                    logger.info("Task configuration file changed, reloading...")
+                    return True
+            
+            # Check GC policy file
+            if os.path.exists(self.gc_policy_file):
+                gc_mtime = os.path.getmtime(self.gc_policy_file)
+                if not hasattr(self, 'last_gc_mtime') or gc_mtime > self.last_gc_mtime:
+                    self.last_gc_mtime = gc_mtime
+                    logger.info("Garbage collection policy file changed, reloading...")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking configuration file changes: {e}")
+            return False
+    
+    def _parse_interval_to_seconds(self, interval_str: str) -> int:
+        """Parse time interval string to seconds"""
+        try:
+            interval_str = interval_str.strip()
+            
+            # If it's just a number, treat as seconds
+            if interval_str.isdigit():
+                return int(interval_str)
+            
+            # Parse with unit
+            if interval_str.endswith('s'):
+                return int(interval_str[:-1])
+            elif interval_str.endswith('m'):
+                return int(interval_str[:-1]) * 60
+            elif interval_str.endswith('h'):
+                return int(interval_str[:-1]) * 3600
+            elif interval_str.endswith('d'):
+                return int(interval_str[:-1]) * 86400
+            else:
+                # Try to parse as number
+                return int(interval_str)
+                
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid interval format: {interval_str}, using default 300 seconds")
+            return 300
+    
+    def update_cleanup_interval(self, gc_policy: Dict):
+        """Update cleanup interval from GC policy"""
+        try:
+            interval_str = gc_policy.get('cleanupInterval', '5m')
+            new_interval = self._parse_interval_to_seconds(interval_str)
+            
+            # Apply safety limits
+            new_interval = max(30, min(86400, new_interval))  # 30 seconds to 24 hours
+            
+            if new_interval != self.cleanup_interval_seconds:
+                self.cleanup_interval_seconds = new_interval
+                logger.info(f"Updated cleanup interval to {new_interval} seconds ({interval_str})")
+                
+        except Exception as e:
+            logger.warning(f"Failed to update cleanup interval: {e}")
+    
+    def should_run_cleanup(self) -> bool:
+        """Check if cleanup should run based on interval"""
+        current_time = time.time()
+        return (current_time - self.last_cleanup_time) >= self.cleanup_interval_seconds
     
     def run(self):
         """Main run loop"""
-        logger.info("CronDispatcher started")
+        logger.info("CronDispatcher starting...")
         
+        # Initialize CCI authentication
+        if not self.initialize_cci_authentication():
+            logger.error("Failed to initialize CCI authentication, continuing without it...")
+        
+        # Initial configuration load
+        self._load_and_apply_config()
+        
+        logger.info("CronDispatcher started successfully")
+        
+        # Main monitoring loop
         while True:
             try:
-                # Load task configuration
-                tasks = self.load_config_from_configmap()
-                if tasks:
-                    # Update crontab
-                    self.update_crontab(tasks)
+                # Check for configuration changes every 30 seconds
+                if self.watch_config_changes():
+                    self._load_and_apply_config()
                 
-                # Execute garbage collection
-                self.cleanup_pods()
+                # Run cleanup based on interval
+                if self.should_run_cleanup():
+                    self._run_cleanup()
                 
-                # Wait for next check (check configuration changes every 5 minutes)
-                time.sleep(300)
+                time.sleep(30)  # Check every 30 seconds
                 
             except KeyboardInterrupt:
-                logger.info("Received stop signal, shutting down...")
+                logger.info("Received interrupt signal, shutting down...")
                 break
             except Exception as e:
-                logger.error(f"Runtime error occurred: {e}")
-                time.sleep(60)  # Wait 1 minute before retry on error
-
-# Health check service
-app = Flask(__name__)
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint"""
-    try:
-        # Check crond service status
-        result = subprocess.run(['systemctl', 'is-active', 'crond'], 
-                              capture_output=True, text=True)
+                logger.error(f"Error in main loop: {e}")
+                time.sleep(30)
         
-        if result.returncode == 0 and result.stdout.strip() == 'active':
-            return jsonify({'status': 'healthy', 'crond': 'active'}), 200
-        else:
-            return jsonify({'status': 'unhealthy', 'crond': 'inactive'}), 503
-            
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        logger.info("CronDispatcher stopped")
+    
+    def _load_and_apply_config(self):
+        """Load and apply configuration"""
+        # Load task configuration
+        tasks = self.load_config_from_file()
+        if tasks:
+            self.update_crontab(tasks)
+        
+        # Load GC policy
+        gc_policy = self.load_gc_policy()
+        self.update_cleanup_interval(gc_policy)
+    
+    def _run_cleanup(self):
+        """Run garbage collection cleanup"""
+        gc_policy = self.load_gc_policy()
+        self.pod_cleaner.cleanup_pods(gc_policy)
+        self.last_cleanup_time = time.time()
 
 def main():
     """Main function"""
-    if len(sys.argv) > 1 and sys.argv[1] == 'health':
-        # Health check mode
-        app.run(host='0.0.0.0', port=8080)
-    else:
-        # Normal run mode
-        dispatcher = CronDispatcher()
-        dispatcher.run()
+    dispatcher = CronDispatcher()
+    dispatcher.run()
 
 if __name__ == '__main__':
     main() 

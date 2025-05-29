@@ -1,39 +1,29 @@
 #!/bin/bash
+# CronDispatcher container startup script
+
 set -e
 
-echo "CronDispatcher container starting..."
-
-# Create necessary directories
+# Create log directory
 mkdir -p /var/log/cron-dispatcher
-mkdir -p /etc/cron-templates
-mkdir -p /tmp
 
 # Set timezone
-TIMEZONE=${CRON_TIMEZONE:-Africa/Johannesburg}
 if [ -n "$CRON_TIMEZONE" ]; then
     echo "Setting timezone to: $CRON_TIMEZONE"
-    if [ -f "/usr/share/zoneinfo/$CRON_TIMEZONE" ]; then
-        ln -sf "/usr/share/zoneinfo/$CRON_TIMEZONE" /etc/localtime
-        echo "$CRON_TIMEZONE" > /etc/timezone
-    else
-        echo "Warning: Timezone $CRON_TIMEZONE does not exist, using default Africa/Johannesburg timezone"
-    fi
+    ln -sf /usr/share/zoneinfo/$CRON_TIMEZONE /etc/localtime
+    echo $CRON_TIMEZONE > /etc/timezone
 fi
 
-# Set environment variables
-export NAMESPACE=${NAMESPACE:-default}
-export CRON_TIMEZONE=${CRON_TIMEZONE:-Africa/Johannesburg}
-
-echo "Environment configuration:"
-echo "  - Namespace: $NAMESPACE"
-echo "  - Timezone: $CRON_TIMEZONE"
+# Initialize crontab
+echo "Initializing crontab..."
+touch /var/spool/cron/root
+chmod 600 /var/spool/cron/root
 
 # Start crond service
 echo "Starting crond service..."
-systemctl enable crond
 systemctl start crond
+systemctl enable crond
 
-# Check crond service status
+# Check if crond service is running
 if systemctl is-active --quiet crond; then
     echo "[PASS] crond service started successfully"
 else
@@ -41,22 +31,17 @@ else
     exit 1
 fi
 
-# Start health check service (background)
-echo "Starting health check service..."
-python3 /app/src/main.py health &
-HEALTH_PID=$!
+# Display configuration information
+echo "=== CronDispatcher Configuration ==="
+echo "Namespace: ${NAMESPACE:-default}"
+echo "Timezone: ${CRON_TIMEZONE:-UTC}"
+echo "GC Dry Run: ${GC_DRY_RUN:-false}"
+echo "GC Batch Size: ${GC_BATCH_SIZE:-50}"
+echo "Configuration Directory: /etc/cron-dispatcher-config"
+echo "GC Policy Directory: /etc/cron-dispatcher-gc-policy"
+echo "Pod Definitions: Retrieved from ConfigMaps using ccictl"
+echo "=================================="
 
-# Wait for health check service to start
-sleep 3
-
-# Check if health check service is running normally
-if kill -0 $HEALTH_PID 2>/dev/null; then
-    echo "[PASS] Health check service started successfully (PID: $HEALTH_PID)"
-else
-    echo "[FAIL] Health check service failed to start"
-    exit 1
-fi
-
-# Start main program
-echo "Starting CronDispatcher main program..."
+# Start main CronDispatcher application
+echo "Starting CronDispatcher main application..."
 exec python3 /app/src/main.py 

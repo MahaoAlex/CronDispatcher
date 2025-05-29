@@ -1,8 +1,10 @@
-# Use CentOS 8 Stream as base image (LTS version)
+# Use CentOS 8 as base image
 FROM centos:8
 
 # Set environment variables
+# Force Python to output immediately (no buffering) for real-time logging
 ENV PYTHONUNBUFFERED=1
+ENV LANG=C.UTF-8
 ENV CRON_TIMEZONE=UTC
 
 # Update package manager and install necessary packages
@@ -24,14 +26,17 @@ RUN curl -L -o /usr/local/bin/ccictl "https://cci-kubectl.obs.cn-north-1.myhuawe
     chmod +x /usr/local/bin/ccictl
 
 # Create necessary directories
-RUN mkdir -p /etc/cron-templates /var/log/cron-dispatcher /etc/cron.d
+RUN mkdir -p /var/log/cron-dispatcher && \
+    mkdir -p /etc/cron-dispatcher-config && \
+    mkdir -p /etc/cron-dispatcher-gc-policy
 
 # Copy application code
 COPY src/ ./src/
 COPY config/ ./config/
+COPY scripts/ ./scripts/
 
 # Set permissions
-RUN chmod +x src/main.py src/pod_creator.py && \
+RUN chmod +x src/main.py src/pod_creator.py scripts/entrypoint.sh && \
     chmod 644 /etc/crontab
 
 # Enable crond service logging
@@ -41,16 +46,12 @@ RUN echo "CRONDARGS=-s -m off" >> /etc/sysconfig/crond
 COPY scripts/health_check.sh /usr/local/bin/health_check.sh
 RUN chmod +x /usr/local/bin/health_check.sh
 
-# Create startup script
-COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Create systemd environment
+RUN systemctl enable crond
 
-# Expose health check port
-EXPOSE 8080
-
-# Health check
+# Health check (using script-based check)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD /usr/local/bin/health_check.sh
 
-# Set startup command
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"] 
+# Set entrypoint
+ENTRYPOINT ["./scripts/entrypoint.sh"] 

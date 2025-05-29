@@ -1,209 +1,348 @@
-# CronDispatcher Design Proposal
+# CronDispatcher
 
-## Feature Overview
+## Overview
 
-CronDispatcher is a Kubernetes namespace-level cron job management platform that implements containerized orchestration and lifecycle management of scheduled tasks through a declarative configuration mode driven by ConfigMap.
+CronDispatcher is a Kubernetes namespace-level cron job management platform that implements containerized orchestration and lifecycle management of scheduled tasks through a declarative configuration mode driven by ConfigMap. It provides a robust, scalable solution for managing scheduled workloads in CCI 2.0 environments.
 
-## Detailed Feature Design
+## Key Features
 
-### Task Creation
+- **ConfigMap-Driven Configuration**: Declarative task management through Kubernetes ConfigMaps
+- **Dynamic Pod Creation**: Creates Pods from ConfigMap-stored definitions using ccictl
+- **Hot Configuration Updates**: Automatic detection and application of configuration changes
+- **Intelligent Garbage Collection**: Configurable cleanup policies for completed and failed Pods
+- **CCI 2.0 Integration**: Native support for Huawei Cloud Container Instance service
+- **Timezone Support**: Configurable timezone handling for global deployments
+- **Health Monitoring**: Built-in health checks and comprehensive logging
 
-1. `CronDispatcher` is deployed in CCI2.0 namespaces through Deployment, with scope limited to the current namespace and replica count of 1. Multi-active and master-slave configurations are not implemented currently; automatic recovery in failure scenarios is controlled through Deployment.
-2. `CronDispatcher` is based on CentOS base image and configured with health checks. Health checks are performed by monitoring the status of the Linux `crond` service.
-3. Enable logging for the `crond` service to record task execution status.
-4. Read scheduled task information from ConfigMap in the current namespace. The ConfigMap name is: `cron-dispatcher-config`.
-5. `CronDispatcher` is implemented in Python, retrieves configuration information, creates pods using ccictl, and refreshes the Linux crontab.
-6. AWS scheduled tasks are triggered by EventBridge rule which type is `Scheduled Standard`. Currently, `CronDispatcher` does not implement failure retry for task launch failures.
-7. The execution result of `CronDispatcher` is Crontab rules. It does not validate whether the specific rules ultimately launch CCI2.0 Pod tasks.
-8. Pods launched by `CronDispatcher` have the following special labels:
+## Architecture
 
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: "<your-task-name>-<uuid>" # Pod name and instance unique identifier are consistent, uuid is 9 digits
-  labels:
-    app.kubernetes.io/managed-by: CronDispatcher  # Management tool
-    cron-dispatcher.io/task-name: "your-task-name"  # Task name, specified in cron-dispatcher-config
-    cron-dispatcher.io/instance: "<your-task-name>-<uuid>"  # Consistent with Pod Name, instance unique identifier, uuid is 9 digits
+### Core Components
+
+1. **CronDispatcher Main Service** (`main.py`)
+   - Configuration management and hot updates
+   - Crontab synchronization and task scheduling
+   - CCI authentication and Pod lifecycle management
+
+2. **Pod Creator** (`pod_creator.py`)
+   - Dynamic Pod creation from ConfigMap definitions
+   - UUID generation and labeling
+   - Error handling and logging
+
+3. **Pod Cleaner** (`pod_cleaner.py`)
+   - Garbage collection based on configurable policies
+   - Batch processing for efficient cleanup
+   - Dry-run mode for testing
+
+4. **CCI Authentication Manager** (`cci_auth_manager.py`)
+   - Secure credential management
+   - ccictl configuration and authentication
+   - Connection testing and validation
+
+### Deployment Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Kubernetes Namespace                     │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐    ┌──────────────────────────────────┐ │
+│  │ CronDispatcher  │    │         ConfigMaps               │ │
+│  │   Deployment    │◄───┤ • cron-dispatcher-config         │ │
+│  │                 │    │ • cron-dispatcher-gc-policy      │ │
+│  │                 │    │ • pod-definition-templates       │ │
+│  └─────────────────┘    └──────────────────────────────────┘ │
+│           │                                                  │
+│           ▼                                                  │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │              Scheduled Pod Instances                    │ │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │ │
+│  │  │ Task-A  │ │ Task-B  │ │ Task-C  │ │   ...   │      │ │
+│  │  │   Pod   │ │   Pod   │ │   Pod   │ │   Pod   │      │ │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-9. The design allows two pods with the same docker image to run simultaneously.
-10. Huawei Cloud backend monitors customer abnormal status.
-11. Track and record launched Cron Pods through stdout logs of the Dispatcher container.
-12. `CronDispatcher` needs to use the ccictl tool for Pod creation. ccictl follows the principle of least privilege and requires creating an independent Huawei Cloud account and generating AK/SK information with minimal permissions (CRUD operations for CCI2.0 workloads).
-13. The current design phase does not implement hot update detection for `cron-dispatcher-config` and `cron-dispatcher-gc-policy`.
+## Configuration
 
-### Timezone Management
+### Task Configuration (`cron-dispatcher-config`)
 
-1. `CronDispatcher` processes cron task timezones according to UTC time by default.
-2. Can be specified through the `CronTimeZone` environment variable of `CronDispatcher`. For example, `CronTimeZone`: `Africa/Johannesburg`
-
-### Task Cleanup
-
-1. Based on CCI2.0 quota rules, garbage collection is needed for successfully completed (Succeeded) task Pods and failed task Pods.
-2. Pod cleanup is configured at the Task dimension through a ConfigMap named `cron-dispatcher-gc-policy`.
-3. `cron-dispatcher-gc-policy` supports Task-level configuration + global default rules structure. Task-level matching is done through the taskSelector field.
-4. Global default rules are configured through the Global section. The default rule is to retain the latest 3 successful and up to 3 failed pods, with Pod identification added.
-5. During cleanup, unified judgment is based on Pod Label tags, specifically checking `app.kubernetes.io/managed-by`.
-6. Retention during cleanup is sorted by time, keeping the 3 most recent ones.
-7. Supports enabling simulated cleanup through environment variable GC_DRY_RUN=true, which only outputs the list of Pods to be deleted without executing actual deletion.
-8. Supports batch deletion mechanism. Configure the number of Pods to clean per batch through environment variable GC_BATCH_SIZE. By default, a maximum of 50 Pods are deleted at a time to avoid excessive API Server pressure.
-
-## Key System Inputs
-
-### cron-dispatcher-config
-
-#### 1. Basic Structure
-* Uses YAML format to store task configuration
-* Top level is a task list (array structure), supporting definition of multiple Cron tasks
-* Each task contains the following core fields:
-    * name: Unique task identifier (required)
-    * schedule: Cron expression (required)
-    * podTemplatePath: Pod configuration file path (required)
-    * State: on / off, defines whether the rule is enabled (optional, default is on)
-* Recommend providing Pod **configuration files** through ConfigMap mount, mounted to the above `podTemplatePath`
-
-#### 2. Cron Expression Specification
-
-* Supports standard Unix Cron format: minute hour day month week
-* Supports special characters: `*, ?, -, /, ,`
-
-#### 3. Pod Configuration File Requirements
-
-* Must be Pod definition YAML compliant with Kubernetes API specifications
-* Specified through absolute path, path resolution rules are defined by CronDispatcher implementation
-
-#### 4. ConfigMap Examples
-
-1. **Namespace: cv-cd-generators**
+Define scheduled tasks through a ConfigMap containing task definitions:
 
 ```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cron-dispatcher-config
-  namespace: cv-cd-generators
+  namespace: your-namespace
 data:
   tasks.yaml: |
-    - name: custom-row-generator
-      schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
-      podTemplatePath: /etc/cron-templates/custom-row-generator-pod.yaml
+    - name: data-processor
+      schedule: "0 */6 * * *"  # Every 6 hours
+      podDefinitionConfigmap: data-processor-template
       state: on
-    - name: delta-rule-based-row-generator
-      schedule: "6 0/1 * * ? *"  # Triggers at minute 6 of every hour, executes once per hour (6-minute delay)
-      podTemplatePath: /etc/cron-templates/delta-rule-based-row-generator-pod.yaml
+    - name: report-generator
+      schedule: "30 2 * * *"   # Daily at 2:30 AM
+      podDefinitionConfigmap: report-generator-template
       state: on
-    - name: editorial-row-generator
-      schedule: "0/30 * * * *"  # Triggers every 30 minutes (at 0 and 30 minutes)
-      podTemplatePath: /etc/cron-templates/editorial-row-generator-pod.yaml
-      state: on
-    - name: layout-cachenator
-      schedule: "0 0 1 1 ? *"  # Triggers at midnight on January 1st every year (executes once per year)
-      podTemplatePath: /etc/cron-templates/layout-cachenator-pod.yaml
-      state: off
-    - name: layout-generator
-      schedule: "30 0/3 * * ? *"  # Triggers at minute 30 of every 3 hours (0:30, 3:30, 6:30, etc.)
-      podTemplatePath: /etc/cron-templates/layout-generator-pod.yaml
-      state: on
-    - name: personalised-context-row-generator
-      schedule: "30 0/6 * * ? *"  # Triggers at minute 30 of every 6 hours (0:30, 6:30, 12:30, 18:30)
-      podTemplatePath: /etc/cron-templates/personalised-context-row-generator-pod.yaml
-      state: on
-    - name: placeholder-row-generator
-      schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
-      podTemplatePath: /etc/cron-templates/placeholder-row-generator-pod.yaml
-      state: on
-    - name: rule-based-row-generator
-      schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
-      podTemplatePath: /etc/cron-templates/rule-based-row-generator-pod.yaml
-      state: on
-    - name: user-context-rule-row-generator
-      schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
-      podTemplatePath: /etc/cron-templates/user-context-rule-row-generator-pod.yaml
+    - name: maintenance-task
+      schedule: "0 0 * * 0"    # Weekly on Sunday
+      podDefinitionConfigmap: maintenance-task-template
       state: off
 ```
 
-2. **Namespace: data-ingest**
+#### Task Configuration Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique task identifier |
+| `schedule` | string | Yes | Cron expression (Unix format) |
+| `podDefinitionConfigmap` | string | Yes | ConfigMap containing Pod definition |
+| `state` | string | No | Task state: `on` (default) or `off` |
+
+### Pod Definition ConfigMaps
+
+Store Pod definitions in separate ConfigMaps for reusability:
 
 ```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cron-dispatcher-config
-  namespace: data-ingest
+  name: data-processor-template
+  namespace: your-namespace
 data:
-  tasks.yaml: |
-    - name: bouquets-ingest-scheduler
-      schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
-      podTemplatePath: /etc/cron-templates/bouquets-ingest-scheduler-pod.yaml
-      state: off
-    - name: boxoffice-ingest-scheduler
-      schedule: "0 */6 * * ? MON-FRI"  # Triggers at minute 0 every 6 hours, Monday to Friday (0:00, 6:00, 12:00, 18:00)
-      podTemplatePath: /etc/cron-templates/boxoffice-ingest-scheduler-pod.yaml
-      state: on
-    - name: bulk-agnostic-vod-ingest-scheduler
-      schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
-      podTemplatePath: /etc/cron-templates/bulk-agnostic-vod-ingest-scheduler-pod.yaml
-      state: off
-    - name: epg-channels-ingest-scheduler
-      schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
-      podTemplatePath: /etc/cron-templates/epg-channels-ingest-scheduler-pod.yaml
-      state: off
-    - name: epg-ingest-scheduler
-      schedule: "0 6 * * ? *"  # Triggers at 6:00 AM every day
-      podTemplatePath: /etc/cron-templates/epg-ingest-scheduler-pod.yaml
-      state: on
-    - name: exploraapps-ingest-scheduler
-      schedule: "59 12 * * ? *"  # Triggers at 12:59 PM every day
-      podTemplatePath: /etc/cron-templates/exploraapps-ingest-scheduler-pod.yaml
-      state: off
-    - name: gotv-ingest-scheduler
-      schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
-      podTemplatePath: /etc/cron-templates/gotv-ingest-scheduler-pod.yaml
-      state: on
-    - name: imdb-ingest-scheduler
-      schedule: "15 19 * * ? *"  # Triggers at 7:15 PM every day
-      podTemplatePath: /etc/cron-templates/imdb-ingest-scheduler-pod.yaml
-      state: on
-    - name: movielens-ingest-scheduler
-      schedule: "0 6 ? * MON-FRI *"  # Triggers at 6:00 AM, Monday to Friday
-      podTemplatePath: /etc/cron-templates/movielens-ingest-scheduler-pod.yaml
-      state: off
-    - name: showmax-ingest-scheduler
-      schedule: "55 20 * * ? *"  # Triggers at 8:55 PM every day
-      podTemplatePath: /etc/cron-templates/showmax-ingest-scheduler-pod.yaml
-      state: off
-    - name: vod-ingest-scheduler
-      schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
-      podTemplatePath: /etc/cron-templates/vod-ingest-scheduler-pod.yaml
-      state: on
+  pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      containers:
+      - name: processor
+        image: your-registry/data-processor:latest
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+      restartPolicy: Never
 ```
 
-### cron-dispatcher-gc-policy 
+### Garbage Collection Policy (`cron-dispatcher-gc-policy`)
+
+Configure cleanup behavior for completed and failed Pods:
 
 ```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cron-dispatcher-gc-policy
+  namespace: your-namespace
 data:
   gc-policy.yaml: |
-    global:  # Global default rules (effective when no Task match is found)
-      success: 3  # Number of successful tasks to retain
-      failure: 3  # Number of failed tasks to retain
-    tasks:  # Task-level configuration (higher priority than global)
-      - taskSelector:  # Label selector to match specific Task
-          cron-dispatcher.io/task-name: "your-task-name-A"  # Task name
-        success: 5  # Retain 5 successful tasks for this Task
-        failure: 2  # Retain 2 failed tasks for this Task
+    global:
+      success: 3  # Keep 3 successful Pods
+      failure: 3  # Keep 3 failed Pods
+    tasks:
       - taskSelector:
-          cron-dispatcher.io/task-name: "your-task-name-B"  # Task name
-        success: 10  # Retain 10 successful tasks
-        failure: 5  # Retain 5 failed tasks
+          cron-dispatcher.io/task-name: "critical-task"
+        success: 10  # Keep more for critical tasks
+        failure: 5
     labelSelector:
       matchLabels:
-        app.kubernetes.io/managed-by: CronDispatcher # Filter Pods managed by CronDispatcher
-    cleanupInterval: "60m"  # Cleanup task execution interval (every 60 minutes)
-    timeToLive: "1h"       # Maximum survival time for Pods exceeding retention count (retain for 1 hour)
+        app.kubernetes.io/managed-by: CronDispatcher
+    cleanupInterval: "60m"  # Run cleanup every hour
+```
+
+#### Cleanup Interval Configuration
+
+| Format | Description | Seconds |
+|--------|-------------|---------|
+| `30s` | 30 seconds | 30 |
+| `5m` | 5 minutes | 300 |
+| `1h` | 1 hour | 3600 |
+| `1d` | 1 day | 86400 |
+| `120` | Raw seconds | 120 |
+
+**Limits**: 30 seconds minimum, 24 hours maximum
+
+## Deployment
+
+### Prerequisites
+
+1. **CCI 2.0 Environment**: Huawei Cloud Container Instance service
+2. **Credentials**: CCI access credentials (AK/SK, domain, project)
+3. **Namespace**: Kubernetes namespace with appropriate permissions
+4. **ConfigMaps**: Task and policy configurations
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `NAMESPACE` | No | `default` | Kubernetes namespace |
+| `CRON_TIMEZONE` | No | `UTC` | Timezone for cron execution |
+| `CCI_REGION` | No | `af-south-1` | CCI region |
+| `GC_DRY_RUN` | No | `false` | Enable garbage collection dry run |
+| `GC_BATCH_SIZE` | No | `50` | Pods to delete per batch |
+| `CCI_ACCESS_KEY` | Yes | - | CCI access key |
+| `CCI_SECRET_KEY` | Yes | - | CCI secret key |
+| `CCI_DOMAIN_NAME` | Yes | - | CCI domain name |
+| `CCI_PROJECT_NAME` | No | region | CCI project name |
+
+### Deployment Steps
+
+1. **Create Credentials Secret**:
+```bash
+ccictl create secret generic cci-credentials \
+  --from-literal=access-key=YOUR_ACCESS_KEY \
+  --from-literal=secret-key=YOUR_SECRET_KEY \
+  --from-literal=domain-name=YOUR_DOMAIN \
+  --from-literal=project-name=YOUR_PROJECT
+```
+
+2. **Deploy Configuration**:
+```bash
+ccictl apply -f config/cron-dispatcher-config.yaml
+ccictl apply -f config/cron-dispatcher-gc-policy.yaml
+```
+
+3. **Deploy CronDispatcher**:
+```bash
+ccictl apply -f config/deployment.yaml
+```
+
+### Health Checks
+
+CronDispatcher includes comprehensive health monitoring:
+
+- **Liveness Probe**: Monitors crond service and main process
+- **Readiness Probe**: Validates configuration and dependencies
+- **Manual Health Check**: `health_check.sh --verbose`
+
+## Pod Labeling
+
+All Pods created by CronDispatcher include standardized labels:
+
+```yaml
+metadata:
+  name: "task-name-abc123def"
+  labels:
+    app.kubernetes.io/name: "task-name"
+    app.kubernetes.io/managed-by: "CronDispatcher"
+    cron-dispatcher.io/task-name: "task-name"
+    cron-dispatcher.io/instance: "task-name-abc123def"
+  annotations:
+    cron-dispatcher.io/created-by: "CronDispatcher"
+    cron-dispatcher.io/creation-time: "2024-12-01T12:00:00Z"
+    cron-dispatcher.io/source-configmap: "task-template-name"
+```
+
+## Hot Configuration Updates
+
+CronDispatcher automatically detects and applies configuration changes:
+
+- **Detection Frequency**: Every 30 seconds
+- **Supported Changes**: Task addition, removal, modification, and GC policy updates
+- **Update Process**: Automatic crontab rebuild and policy refresh
+- **Zero Downtime**: No container restart required
+
+## Cron Expression Format
+
+Supports standard Unix cron format with Quartz compatibility:
+
+| Field | Values | Special Characters |
+|-------|--------|--------------------|
+| Minute | 0-59 | `* , - /` |
+| Hour | 0-23 | `* , - /` |
+| Day | 1-31 | `* , - / ?` |
+| Month | 1-12 | `* , - /` |
+| Weekday | 0-7 | `* , - / ?` |
+
+### Examples
+
+```bash
+"0 */6 * * *"     # Every 6 hours
+"30 2 * * *"      # Daily at 2:30 AM
+"0 0 * * 0"       # Weekly on Sunday
+"*/15 * * * *"    # Every 15 minutes
+"0 9-17 * * 1-5"  # Hourly during business hours
+```
+
+## Logging
+
+Comprehensive logging across all components:
+
+- **Main Application**: `/var/log/cron-dispatcher/dispatcher.log`
+- **Pod Creator**: `/var/log/cron-dispatcher/pod-creator.log`
+- **System Cron**: Standard syslog integration
+- **Health Checks**: Structured health status reporting
+
+### Log Levels
+
+- **INFO**: Normal operations and status updates
+- **WARN**: Non-critical issues and fallbacks
+- **ERROR**: Critical errors requiring attention
+- **DEBUG**: Detailed troubleshooting information
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Failures**
+   - Verify CCI credentials in secret
+   - Check region configuration
+   - Validate ccictl connectivity
+
+2. **Pod Creation Failures**
+   - Verify ConfigMap exists and contains valid Pod definition
+   - Check namespace permissions
+   - Review resource quotas
+
+3. **Configuration Not Loading**
+   - Verify ConfigMap mounting
+   - Check YAML syntax
+   - Review file permissions
+
+### Debugging Commands
+
+```bash
+# Check CronDispatcher status
+ccictl logs deployment/cron-dispatcher
+
+# Verify configuration
+ccictl get configmap cron-dispatcher-config -o yaml
+
+# Test health manually
+ccictl exec deployment/cron-dispatcher -- /usr/local/bin/health_check.sh --verbose
+
+# Check crontab status
+ccictl exec deployment/cron-dispatcher -- crontab -l
+```
+
+## Performance Considerations
+
+- **Resource Limits**: Configure appropriate CPU and memory limits
+- **Batch Processing**: Adjust `GC_BATCH_SIZE` for large-scale deployments
+- **Cleanup Frequency**: Balance `cleanupInterval` with resource usage
+- **Concurrent Pods**: Monitor namespace quotas and resource consumption
+
+## Security
+
+- **Least Privilege**: Use minimal CCI permissions for Pod operations
+- **Secret Management**: Store credentials securely in Kubernetes secrets
+- **Network Policies**: Implement appropriate network restrictions
+- **Image Security**: Use trusted base images and regular updates
+
+## Version Information
+
+- **Current Version**: 1.0.0
+- **Kubernetes Compatibility**: 1.20+
+- **CCI Version**: 2.0
+- **Python Version**: 3.8+
+
+## Dependencies
+
+```
+PyYAML==6.0.1
+croniter==2.0.1
+python-crontab==3.0.0
 ```

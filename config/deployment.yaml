@@ -2,25 +2,32 @@ kind: Deployment
 apiVersion: cci/v2
 metadata:
   name: cron-dispatcher
-  namespace: cv-cd-generators  # Modify according to actual namespace
+  namespace: cv-cd-generators  # Update this namespace according to your deployment requirements
+  labels:
+    app.kubernetes.io/name: cron-dispatcher
+    app.kubernetes.io/managed-by: CronDispatcher
+    cron-dispatcher.io/component: dispatcher
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: cron-dispatcher
+      app.kubernetes.io/name: cron-dispatcher
+      cron-dispatcher.io/component: dispatcher
   template:
     metadata:
       creationTimestamp: null
       labels:
-        app: cron-dispatcher
-      annotations:  # Modify according to actual LTS stream config
+        app.kubernetes.io/name: cron-dispatcher
+        app.kubernetes.io/managed-by: CronDispatcher
+        cron-dispatcher.io/component: dispatcher
+      annotations:  # Update LTS stream configuration according to your logging requirements
         logconf.k8s.io/fluent-bit-log-type: lts
         logconfigs.logging.openvessel.io: '{"default-config":{"container_files":{"container-0":"stdout.log;/var/log/cron-dispatcher/*.log"},"regulation":"","lts-log-info":{"cc885264-61e5-4301-aad6-699c3fbf0a36":"e7b54433-3fd4-4a69-88c6-e73d17feb969"}}}'
         resource.cci.io/pod-size-specs: 1.00_2.0
     spec:
       containers:
       - name: default
-        image: swr.af-south-1.myhuaweicloud.com/content-discovery/cron-dispatcher:latest  # Replace with actual image address
+        image: swr.af-south-1.myhuaweicloud.com/content-discovery/cron-dispatcher:latest  # Update with your actual image registry address
         resources:
           limits:
             cpu: '0'
@@ -36,37 +43,76 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: CRON_TIMEZONE
-          value: "UTC"  # Can be modified as needed, e.g., "Asia/Johannesburg"
+          value: "UTC"  # Timezone for cron job execution, update as required (examples: "Asia/Shanghai", "America/New_York")
         - name: GC_DRY_RUN
           value: "false"  # Set to "true" to enable dry run mode for garbage collection
         - name: GC_BATCH_SIZE
           value: "50"  # Number of Pods to delete per batch during garbage collection
+        - name: CCI_REGION
+          value: "af-south-1"  # CCI region, update as needed (examples: cn-north-4, cn-east-3, cn-south-4, ap-southeast-3)
+        - name: CCI_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cci-credentials
+              key: access-key
+              optional: false
+        - name: CCI_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cci-credentials
+              key: secret-key
+              optional: false
+        - name: CCI_DOMAIN_NAME
+          valueFrom:
+            secretKeyRef:
+              name: cci-credentials
+              key: domain-name
+              optional: false
+        - name: CCI_PROJECT_NAME
+          valueFrom:
+            secretKeyRef:
+              name: cci-credentials
+              key: project-name
+              optional: true  # Optional, will use region as default if not specified
         volumeMounts:
-        - name: cron-templates
-          mountPath: /etc/cron-templates
+        - name: cron-dispatcher-config
+          mountPath: /etc/cron-dispatcher-config
+          readOnly: true
+        - name: cron-dispatcher-gc-policy
+          mountPath: /etc/cron-dispatcher-gc-policy
           readOnly: true
         - name: log-volume
           mountPath: /var/log/cron-dispatcher
         livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
+          exec:
+            command:
+            - /bin/bash
+            - /usr/local/bin/health_check.sh
+            - --liveness
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 10
+          successThreshold: 1
           failureThreshold: 3
         readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
+          exec:
+            command:
+            - /bin/bash
+            - /usr/local/bin/health_check.sh
+            - --readiness
+          initialDelaySeconds: 15
           periodSeconds: 10
           timeoutSeconds: 5
+          successThreshold: 1
           failureThreshold: 3
       volumes:
-      - name: cron-templates
+      - name: cron-dispatcher-config
         configMap:
-          name: cron-templates
+          name: cron-dispatcher-config
+          optional: false
+      - name: cron-dispatcher-gc-policy
+        configMap:
+          name: cron-dispatcher-gc-policy
           optional: true
       - name: log-volume
         emptyDir: {}

@@ -9,6 +9,7 @@ import logging
 import yaml
 import uuid
 import subprocess
+import json
 from datetime import datetime
 
 # Configure logging
@@ -32,23 +33,68 @@ class PodCreator:
         """Generate 9-digit UUID"""
         return str(uuid.uuid4()).replace('-', '')[:9]
     
-    def create_pod(self, task_name: str, template_path: str) -> bool:
-        """Create Pod"""
+    def get_pod_definition_from_configmap(self, configmap_name: str) -> dict:
+        """Retrieve Pod definition from ConfigMap using ccictl"""
         try:
-            # Check if template file exists
-            if not os.path.exists(template_path):
-                logger.error(f"Pod template file does not exist: {template_path}")
-                return False
+            # Use ccictl to get ConfigMap
+            cmd = f"ccictl get configmap {configmap_name} -n {self.namespace} -o json"
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
-            # Read Pod template
-            with open(template_path, 'r', encoding='utf-8') as f:
-                pod_template = yaml.safe_load(f)
+            if result.returncode != 0:
+                logger.error(f"Failed to retrieve ConfigMap {configmap_name}: {result.stderr}")
+                return None
+            
+            # Parse ConfigMap JSON
+            configmap_data = json.loads(result.stdout)
+            
+            # Extract Pod definition from ConfigMap data
+            if 'data' not in configmap_data:
+                logger.error(f"ConfigMap {configmap_name} has no data section")
+                return None
+            
+            # Look for pod.yaml in ConfigMap data
+            pod_yaml_content = configmap_data['data'].get('pod.yaml')
+            if not pod_yaml_content:
+                logger.error(f"ConfigMap {configmap_name} does not contain 'pod.yaml' key")
+                return None
+            
+            # Parse Pod definition YAML
+            pod_definition = yaml.safe_load(pod_yaml_content)
+            
+            if not pod_definition:
+                logger.error(f"Invalid Pod definition in ConfigMap {configmap_name}")
+                return None
+            
+            logger.info(f"Successfully retrieved Pod definition from ConfigMap {configmap_name}")
+            return pod_definition
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse ConfigMap JSON: {e}")
+            return None
+        except yaml.YAMLError as e:
+            logger.error(f"Failed to parse Pod definition YAML: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error retrieving Pod definition from ConfigMap {configmap_name}: {e}")
+            return None
+    
+    def create_pod(self, task_name: str, configmap_name: str) -> bool:
+        """Create Pod from ConfigMap definition"""
+        try:
+            # Get Pod definition from ConfigMap
+            pod_template = self.get_pod_definition_from_configmap(configmap_name)
+            if not pod_template:
+                logger.error(f"Failed to retrieve Pod definition from ConfigMap: {configmap_name}")
+                return False
             
             # Generate unique identifier
             pod_uuid = self.generate_pod_uuid()
             pod_name = f"{task_name}-{pod_uuid}"
             
             # Set Pod name and namespace
+            if 'metadata' not in pod_template:
+                pod_template['metadata'] = {}
+            
             pod_template['metadata']['name'] = pod_name
             pod_template['metadata']['namespace'] = self.namespace
             
@@ -56,11 +102,12 @@ class PodCreator:
             if 'labels' not in pod_template['metadata']:
                 pod_template['metadata']['labels'] = {}
             
+            # Essential labels for CronDispatcher
             pod_template['metadata']['labels'].update({
+                'app.kubernetes.io/name': task_name,
                 'app.kubernetes.io/managed-by': 'CronDispatcher',
                 'cron-dispatcher.io/task-name': task_name,
-                'cron-dispatcher.io/instance': pod_name,
-                'cron-dispatcher.io/created-at': datetime.utcnow().strftime('%Y%m%d%H%M%S')
+                'cron-dispatcher.io/instance': pod_name
             })
             
             # Add annotations
@@ -69,7 +116,8 @@ class PodCreator:
             
             pod_template['metadata']['annotations'].update({
                 'cron-dispatcher.io/created-by': 'CronDispatcher',
-                'cron-dispatcher.io/creation-time': datetime.utcnow().isoformat() + 'Z'
+                'cron-dispatcher.io/creation-time': datetime.utcnow().isoformat() + 'Z',
+                'cron-dispatcher.io/source-configmap': configmap_name
             })
             
             # Create temporary file
@@ -88,32 +136,32 @@ class PodCreator:
                 pass
             
             if result.returncode == 0:
-                logger.info(f"✅ Successfully created Pod: {pod_name} (Task: {task_name})")
+                logger.info(f"Successfully created Pod: {pod_name} (Task: {task_name}, ConfigMap: {configmap_name})")
                 print(f"Pod created successfully: {pod_name}")
                 return True
             else:
-                logger.error(f"❌ Failed to create Pod: {result.stderr}")
+                logger.error(f"Failed to create Pod: {result.stderr}")
                 print(f"Pod creation failed: {result.stderr}")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error occurred while creating Pod: {e}")
+            logger.error(f"Error occurred while creating Pod: {e}")
             print(f"Error occurred while creating Pod: {e}")
             return False
 
 def main():
     """Main function"""
     if len(sys.argv) != 3:
-        print("Usage: python3 pod_creator.py <task_name> <template_path>")
+        print("Usage: python3 pod_creator.py <task_name> <configmap_name>")
         sys.exit(1)
     
     task_name = sys.argv[1]
-    template_path = sys.argv[2]
+    configmap_name = sys.argv[2]
     
-    logger.info(f"Starting Pod creation - Task: {task_name}, Template: {template_path}")
+    logger.info(f"Starting Pod creation - Task: {task_name}, ConfigMap: {configmap_name}")
     
     creator = PodCreator()
-    success = creator.create_pod(task_name, template_path)
+    success = creator.create_pod(task_name, configmap_name)
     
     if success:
         logger.info(f"Pod creation task completed - Task: {task_name}")

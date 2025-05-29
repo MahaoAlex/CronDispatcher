@@ -3,53 +3,55 @@ kind: ConfigMap
 metadata:
   name: cron-dispatcher-config
   namespace: data-ingest
-labels:
-  app: cron-dispatcher
+  labels:
+    app.kubernetes.io/name: cron-dispatcher
+    app.kubernetes.io/managed-by: CronDispatcher
+    cron-dispatcher.io/component: task-config
 data:
   tasks.yaml: |
     - name: bouquets-ingest-scheduler
       schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
-      podTemplatePath: /etc/cron-templates/bouquets-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: bouquets-ingest-scheduler-template
       state: off
     - name: boxoffice-ingest-scheduler
       schedule: "0 */6 * * ? MON-FRI"  # Triggers at minute 0 every 6 hours, Monday to Friday (0:00, 6:00, 12:00, 18:00)
-      podTemplatePath: /etc/cron-templates/boxoffice-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: boxoffice-ingest-scheduler-template
       state: on
     - name: bulk-agnostic-vod-ingest-scheduler
       schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
-      podTemplatePath: /etc/cron-templates/bulk-agnostic-vod-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: bulk-agnostic-vod-ingest-scheduler-template
       state: off
     - name: epg-channels-ingest-scheduler
       schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
-      podTemplatePath: /etc/cron-templates/epg-channels-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: epg-channels-ingest-scheduler-template
       state: off
     - name: epg-ingest-scheduler
       schedule: "0 6 * * ? *"  # Triggers at 6:00 AM every day
-      podTemplatePath: /etc/cron-templates/epg-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: epg-ingest-scheduler-template
       state: on
     - name: exploraapps-ingest-scheduler
       schedule: "59 12 * * ? *"  # Triggers at 12:59 PM every day
-      podTemplatePath: /etc/cron-templates/exploraapps-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: exploraapps-ingest-scheduler-template
       state: off
     - name: gotv-ingest-scheduler
       schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
-      podTemplatePath: /etc/cron-templates/gotv-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: gotv-ingest-scheduler-template
       state: on
     - name: imdb-ingest-scheduler
       schedule: "15 19 * * ? *"  # Triggers at 7:15 PM every day
-      podTemplatePath: /etc/cron-templates/imdb-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: imdb-ingest-scheduler-template
       state: on
     - name: movielens-ingest-scheduler
       schedule: "0 6 ? * MON-FRI *"  # Triggers at 6:00 AM, Monday to Friday
-      podTemplatePath: /etc/cron-templates/movielens-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: movielens-ingest-scheduler-template
       state: off
     - name: showmax-ingest-scheduler
       schedule: "55 20 * * ? *"  # Triggers at 8:55 PM every day
-      podTemplatePath: /etc/cron-templates/showmax-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: showmax-ingest-scheduler-template
       state: off
     - name: vod-ingest-scheduler
       schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
-      podTemplatePath: /etc/cron-templates/vod-ingest-scheduler-pod.yaml
+      podDefinitionConfigmap: vod-ingest-scheduler-template
       state: on
 ---
 apiVersion: v1
@@ -57,45 +59,47 @@ kind: ConfigMap
 metadata:
   name: cron-dispatcher-config
   namespace: cv-cd-generators
-labels:
-  app: cron-dispatcher
+  labels:
+    app.kubernetes.io/name: cron-dispatcher
+    app.kubernetes.io/managed-by: CronDispatcher
+    cron-dispatcher.io/component: task-config
 data:
   tasks.yaml: |
     - name: custom-row-generator
       schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
-      podTemplatePath: /etc/cron-templates/custom-row-generator-pod.yaml
+      podDefinitionConfigmap: custom-row-generator-template
       state: on
     - name: delta-rule-based-row-generator
       schedule: "6 0/1 * * ? *"  # Triggers at minute 6 of every hour, executes once per hour (6-minute delay)
-      podTemplatePath: /etc/cron-templates/delta-rule-based-row-generator-pod.yaml
+      podDefinitionConfigmap: delta-rule-based-row-generator-template
       state: on
     - name: editorial-row-generator
       schedule: "0/30 * * * *"  # Triggers every 30 minutes (at 0 and 30 minutes)
-      podTemplatePath: /etc/cron-templates/editorial-row-generator-pod.yaml
+      podDefinitionConfigmap: editorial-row-generator-template
       state: on
     - name: layout-cachenator
       schedule: "0 0 1 1 ? *"  # Triggers at midnight on January 1st every year (executes once per year)
-      podTemplatePath: /etc/cron-templates/layout-cachenator-pod.yaml
+      podDefinitionConfigmap: layout-cachenator-template
       state: off
     - name: layout-generator
       schedule: "30 0/3 * * ? *"  # Triggers at minute 30 of every 3 hours (0:30, 3:30, 6:30, etc.)
-      podTemplatePath: /etc/cron-templates/layout-generator-pod.yaml
+      podDefinitionConfigmap: layout-generator-template
       state: on
     - name: personalised-context-row-generator
       schedule: "30 0/6 * * ? *"  # Triggers at minute 30 of every 6 hours (0:30, 6:30, 12:30, 18:30)
-      podTemplatePath: /etc/cron-templates/personalised-context-row-generator-pod.yaml
+      podDefinitionConfigmap: personalised-context-row-generator-template
       state: on
     - name: placeholder-row-generator
       schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
-      podTemplatePath: /etc/cron-templates/placeholder-row-generator-pod.yaml
+      podDefinitionConfigmap: placeholder-row-generator-template
       state: on
     - name: rule-based-row-generator
       schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
-      podTemplatePath: /etc/cron-templates/rule-based-row-generator-pod.yaml
+      podDefinitionConfigmap: rule-based-row-generator-template
       state: on
     - name: user-context-rule-row-generator
       schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
-      podTemplatePath: /etc/cron-templates/user-context-rule-row-generator-pod.yaml
+      podDefinitionConfigmap: user-context-rule-row-generator-template
       state: off
 ---
 apiVersion: v1
@@ -103,6 +107,10 @@ kind: ConfigMap
 metadata:
   name: cron-dispatcher-gc-policy
   namespace: cv-cd-generators
+  labels:
+    app.kubernetes.io/name: cron-dispatcher
+    app.kubernetes.io/managed-by: CronDispatcher
+    cron-dispatcher.io/component: gc-policy
 data:
   gc-policy.yaml: |
     global:  # Global default rules (effective when no Task match is found)
@@ -112,7 +120,6 @@ data:
       matchLabels:
         app.kubernetes.io/managed-by: CronDispatcher # Filter Pods managed by CronDispatcher
     cleanupInterval: "60m"  # Cleanup task execution interval (every 60 minutes)
-    timeToLive: "1h"       # Maximum survival time for Pods exceeding retention count (retain for 1 hour)
 
 ---
 apiVersion: v1
@@ -120,6 +127,10 @@ kind: ConfigMap
 metadata:
   name: cron-dispatcher-gc-policy
   namespace: data-ingest
+  labels:
+    app.kubernetes.io/name: cron-dispatcher
+    app.kubernetes.io/managed-by: CronDispatcher
+    cron-dispatcher.io/component: gc-policy
 data:
   gc-policy.yaml: |
     global:  # Global default rules (effective when no Task match is found)
@@ -129,4 +140,3 @@ data:
       matchLabels:
         app.kubernetes.io/managed-by: CronDispatcher # Filter Pods managed by CronDispatcher
     cleanupInterval: "60m"  # Cleanup task execution interval (every 60 minutes)
-    timeToLive: "1h"       # Maximum survival time for Pods exceeding retention count (retain for 1 hour)
