@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cron-dispatcher-config
+  namespace: default  # Modify according to actual namespace
+  labels:
+    app: cron-dispatcher
+    config-type: task-config
+data:
+  tasks.yaml: |
+    # CronDispatcher task configuration example
+    # Each task contains the following fields:
+    # - name: Unique task identifier (required)
+    # - schedule: Cron expression (required, supports Quartz format)
+    # - podTemplatePath: Pod configuration file path (required)
+    # - state: on/off, defines whether the rule is enabled (optional, default on)
+    
+    - name: example-task-1
+      schedule: "0 */1 * * ? *"  # Execute every hour
+      podTemplatePath: /etc/cron-templates/example-task-1-pod.yaml
+      state: on
+      
+    - name: example-task-2
+      schedule: "30 */2 * * ? *"  # Execute at 30 minutes past every 2 hours
+      podTemplatePath: /etc/cron-templates/example-task-2-pod.yaml
+      state: on
+      
+    - name: daily-cleanup
+      schedule: "0 2 * * ? *"  # Execute daily at 2 AM
+      podTemplatePath: /etc/cron-templates/daily-cleanup-pod.yaml
+      state: on
+      
+    - name: weekly-report
+      schedule: "0 9 ? * MON *"  # Execute every Monday at 9 AM
+      podTemplatePath: /etc/cron-templates/weekly-report-pod.yaml
+      state: off  # Temporarily disabled
+      
+    - name: monthly-backup
+      schedule: "0 3 1 * ? *"  # Execute on the 1st of every month at 3 AM
+      podTemplatePath: /etc/cron-templates/monthly-backup-pod.yaml
+      state: on
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cron-dispatcher-gc-policy
+  namespace: cv-cd-generators
+data:
+  gc-policy.yaml: |
+    global:  # Global default rules (effective when no Task match is found)
+      success: 3  # Number of successful tasks to retain
+      failure: 3  # Number of failed tasks to retain
+    tasks:  # Task-level configuration (higher priority than global)
+      - taskSelector:  # Label selector to match specific Task
+          cron-dispatcher.io/task-name: "custom-row-generator"  # Task name
+        success: 5  # Retain 5 successful tasks for this Task
+        failure: 2  # Retain 2 failed tasks for this Task
+      - taskSelector:
+          cron-dispatcher.io/task-name: "layout-generator"  # Task name
+        success: 10  # Retain 10 successful tasks
+        failure: 5  # Retain 5 failed tasks
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/managed-by: CronDispatcher # Filter Pods managed by CronDispatcher
+    cleanupInterval: "60m"  # Cleanup task execution interval (every 60 minutes)
+    timeToLive: "1h"       # Maximum survival time for Pods exceeding retention count (retain for 1 hour)
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cron-dispatcher-gc-policy
+  namespace: data-ingest
+data:
+  gc-policy.yaml: |
+    global:  # Global default rules (effective when no Task match is found)
+      success: 3  # Number of successful tasks to retain
+      failure: 3  # Number of failed tasks to retain
+    tasks:  # Task-level configuration (higher priority than global)
+      - taskSelector:  # Label selector to match specific Task
+          cron-dispatcher.io/task-name: "epg-ingest-scheduler"  # Task name
+        success: 7  # Retain 7 successful tasks for this Task
+        failure: 3  # Retain 3 failed tasks for this Task
+      - taskSelector:
+          cron-dispatcher.io/task-name: "imdb-ingest-scheduler"  # Task name
+        success: 5  # Retain 5 successful tasks
+        failure: 2  # Retain 2 failed tasks
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/managed-by: CronDispatcher # Filter Pods managed by CronDispatcher
+    cleanupInterval: "60m"  # Cleanup task execution interval (every 60 minutes)
+    timeToLive: "1h"       # Maximum survival time for Pods exceeding retention count (retain for 1 hour)
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cron-templates
+  namespace: default  # Modify according to actual namespace
+  labels:
+    app: cron-dispatcher
+    config-type: pod-templates
+data:
+  example-task-1-pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: example-task-1  # Will be automatically replaced by CronDispatcher
+      labels:
+        task-type: example
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: task-container
+        image: busybox:latest
+        command: ["sh", "-c"]
+        args:
+        - |
+          echo "Executing example task 1..."
+          echo "Current time: $(date)"
+          echo "Task completed"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+            
+  example-task-2-pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: example-task-2  # Will be automatically replaced by CronDispatcher
+      labels:
+        task-type: example
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: task-container
+        image: alpine:latest
+        command: ["sh", "-c"]
+        args:
+        - |
+          echo "Executing example task 2..."
+          sleep 10
+          echo "Task 2 completed"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+            
+  daily-cleanup-pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: daily-cleanup  # Will be automatically replaced by CronDispatcher
+      labels:
+        task-type: cleanup
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: cleanup-container
+        image: busybox:latest
+        command: ["sh", "-c"]
+        args:
+        - |
+          echo "Starting daily cleanup task..."
+          echo "Cleaning temporary files..."
+          echo "Cleanup completed"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+            
+  weekly-report-pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: weekly-report  # Will be automatically replaced by CronDispatcher
+      labels:
+        task-type: report
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: report-container
+        image: busybox:latest
+        command: ["sh", "-c"]
+        args:
+        - |
+          echo "Generating weekly report..."
+          echo "Collecting data..."
+          echo "Weekly report generation completed"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+            
+  monthly-backup-pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: monthly-backup  # Will be automatically replaced by CronDispatcher
+      labels:
+        task-type: backup
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: backup-container
+        image: busybox:latest
+        command: ["sh", "-c"]
+        args:
+        - |
+          echo "Starting monthly backup..."
+          echo "Backing up data..."
+          echo "Backup completed"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m" 
