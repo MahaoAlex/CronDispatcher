@@ -1,53 +1,46 @@
-apiVersion: apps/v1
 kind: Deployment
+apiVersion: cci/v2
 metadata:
   name: cron-dispatcher
-  namespace: default  # Modify according to actual namespace
-  labels:
-    app: cron-dispatcher
-    version: v1.0.0
+  namespace: cv-cd-generators  # Modify according to actual namespace
 spec:
-  replicas: 1  # Single replica deployment
+  replicas: 1
   selector:
     matchLabels:
       app: cron-dispatcher
   template:
     metadata:
+      creationTimestamp: null
       labels:
         app: cron-dispatcher
-        version: v1.0.0
-      annotations:
-        prometheus.io/scrape: "false"  # Temporarily disable Prometheus monitoring
+      annotations:  # Modify according to actual LTS stream config
+        logconf.k8s.io/fluent-bit-log-type: lts
+        logconfigs.logging.openvessel.io: '{"default-config":{"container_files":{"container-0":"stdout.log;/var/log/cron-dispatcher/*.log"},"regulation":"","lts-log-info":{"cc885264-61e5-4301-aad6-699c3fbf0a36":"e7b54433-3fd4-4a69-88c6-e73d17feb969"}}}'
+        resource.cci.io/pod-size-specs: 1.00_2.0
     spec:
-      serviceAccountName: cron-dispatcher-sa
       containers:
-      - name: cron-dispatcher
-        image: cron-dispatcher:latest  # Replace with actual image address
-        imagePullPolicy: Always
+      - name: default
+        image: swr.af-south-1.myhuaweicloud.com/content-discovery/cron-dispatcher:latest  # Replace with actual image address
+        resources:
+          limits:
+            cpu: '0'
+            memory: '0'
+          requests:
+            cpu: '0'
+            memory: '0'
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
         env:
         - name: NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
         - name: CRON_TIMEZONE
-          value: "Africa/Johannesburg"  # Can be modified as needed, e.g., "Asia/Shanghai"
+          value: "UTC"  # Can be modified as needed, e.g., "Asia/Johannesburg"
         - name: GC_DRY_RUN
           value: "false"  # Set to "true" to enable dry run mode for garbage collection
         - name: GC_BATCH_SIZE
           value: "50"  # Number of Pods to delete per batch during garbage collection
-        - name: PYTHONUNBUFFERED
-          value: "1"
-        ports:
-        - containerPort: 8080
-          name: health
-          protocol: TCP
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
         volumeMounts:
         - name: cron-templates
           mountPath: /etc/cron-templates
@@ -70,14 +63,6 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
-        securityContext:
-          runAsNonRoot: false  # Requires root privileges to run crond
-          runAsUser: 0
-          capabilities:
-            add:
-            - SYS_TIME  # Time management permissions
-            - SETUID    # Cron job permissions
-            - SETGID    # Cron job permissions
       volumes:
       - name: cron-templates
         configMap:
@@ -87,58 +72,14 @@ spec:
         emptyDir: {}
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cron-dispatcher-sa
-  namespace: default  # Modify according to actual namespace
-  labels:
-    app: cron-dispatcher
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: cron-dispatcher-role
-  namespace: default  # Modify according to actual namespace
-rules:
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch", "create", "delete"]
-- apiGroups: [""]
-  resources: ["pods/log"]
-  verbs: ["get", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: cron-dispatcher-rolebinding
-  namespace: default  # Modify according to actual namespace
-subjects:
-- kind: ServiceAccount
-  name: cron-dispatcher-sa
-  namespace: default  # Modify according to actual namespace
-roleRef:
-  kind: Role
-  name: cron-dispatcher-role
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: cron-dispatcher-service
-  namespace: default  # Modify according to actual namespace
-  labels:
-    app: cron-dispatcher
-spec:
-  selector:
-    app: cron-dispatcher
-  ports:
-  - name: health
-    port: 8080
-    targetPort: 8080
-    protocol: TCP
-  type: ClusterIP 
+      dnsPolicy: Default
+      securityContext: {}
+      imagePullSecrets:
+        - name: imagepull-secret
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 100%
+  progressDeadlineSeconds: 600

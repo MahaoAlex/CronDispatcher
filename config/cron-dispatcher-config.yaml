@@ -2,44 +2,101 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cron-dispatcher-config
-  namespace: default  # Modify according to actual namespace
-  labels:
-    app: cron-dispatcher
-    config-type: task-config
+  namespace: data-ingest
+labels:
+  app: cron-dispatcher
 data:
   tasks.yaml: |
-    # CronDispatcher task configuration example
-    # Each task contains the following fields:
-    # - name: Unique task identifier (required)
-    # - schedule: Cron expression (required, supports Quartz format)
-    # - podTemplatePath: Pod configuration file path (required)
-    # - state: on/off, defines whether the rule is enabled (optional, default on)
-    
-    - name: example-task-1
-      schedule: "0 */1 * * ? *"  # Execute every hour
-      podTemplatePath: /etc/cron-templates/example-task-1-pod.yaml
+    - name: bouquets-ingest-scheduler
+      schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
+      podTemplatePath: /etc/cron-templates/bouquets-ingest-scheduler-pod.yaml
+      state: off
+    - name: boxoffice-ingest-scheduler
+      schedule: "0 */6 * * ? MON-FRI"  # Triggers at minute 0 every 6 hours, Monday to Friday (0:00, 6:00, 12:00, 18:00)
+      podTemplatePath: /etc/cron-templates/boxoffice-ingest-scheduler-pod.yaml
       state: on
-      
-    - name: example-task-2
-      schedule: "30 */2 * * ? *"  # Execute at 30 minutes past every 2 hours
-      podTemplatePath: /etc/cron-templates/example-task-2-pod.yaml
+    - name: bulk-agnostic-vod-ingest-scheduler
+      schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
+      podTemplatePath: /etc/cron-templates/bulk-agnostic-vod-ingest-scheduler-pod.yaml
+      state: off
+    - name: epg-channels-ingest-scheduler
+      schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
+      podTemplatePath: /etc/cron-templates/epg-channels-ingest-scheduler-pod.yaml
+      state: off
+    - name: epg-ingest-scheduler
+      schedule: "0 6 * * ? *"  # Triggers at 6:00 AM every day
+      podTemplatePath: /etc/cron-templates/epg-ingest-scheduler-pod.yaml
       state: on
-      
-    - name: daily-cleanup
-      schedule: "0 2 * * ? *"  # Execute daily at 2 AM
-      podTemplatePath: /etc/cron-templates/daily-cleanup-pod.yaml
+    - name: exploraapps-ingest-scheduler
+      schedule: "59 12 * * ? *"  # Triggers at 12:59 PM every day
+      podTemplatePath: /etc/cron-templates/exploraapps-ingest-scheduler-pod.yaml
+      state: off
+    - name: gotv-ingest-scheduler
+      schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
+      podTemplatePath: /etc/cron-templates/gotv-ingest-scheduler-pod.yaml
       state: on
-      
-    - name: weekly-report
-      schedule: "0 9 ? * MON *"  # Execute every Monday at 9 AM
-      podTemplatePath: /etc/cron-templates/weekly-report-pod.yaml
-      state: off  # Temporarily disabled
-      
-    - name: monthly-backup
-      schedule: "0 3 1 * ? *"  # Execute on the 1st of every month at 3 AM
-      podTemplatePath: /etc/cron-templates/monthly-backup-pod.yaml
+    - name: imdb-ingest-scheduler
+      schedule: "15 19 * * ? *"  # Triggers at 7:15 PM every day
+      podTemplatePath: /etc/cron-templates/imdb-ingest-scheduler-pod.yaml
       state: on
-
+    - name: movielens-ingest-scheduler
+      schedule: "0 6 ? * MON-FRI *"  # Triggers at 6:00 AM, Monday to Friday
+      podTemplatePath: /etc/cron-templates/movielens-ingest-scheduler-pod.yaml
+      state: off
+    - name: showmax-ingest-scheduler
+      schedule: "55 20 * * ? *"  # Triggers at 8:55 PM every day
+      podTemplatePath: /etc/cron-templates/showmax-ingest-scheduler-pod.yaml
+      state: off
+    - name: vod-ingest-scheduler
+      schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
+      podTemplatePath: /etc/cron-templates/vod-ingest-scheduler-pod.yaml
+      state: on
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cron-dispatcher-config
+  namespace: cv-cd-generators
+labels:
+  app: cron-dispatcher
+data:
+  tasks.yaml: |
+    - name: custom-row-generator
+      schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
+      podTemplatePath: /etc/cron-templates/custom-row-generator-pod.yaml
+      state: on
+    - name: delta-rule-based-row-generator
+      schedule: "6 0/1 * * ? *"  # Triggers at minute 6 of every hour, executes once per hour (6-minute delay)
+      podTemplatePath: /etc/cron-templates/delta-rule-based-row-generator-pod.yaml
+      state: on
+    - name: editorial-row-generator
+      schedule: "0/30 * * * *"  # Triggers every 30 minutes (at 0 and 30 minutes)
+      podTemplatePath: /etc/cron-templates/editorial-row-generator-pod.yaml
+      state: on
+    - name: layout-cachenator
+      schedule: "0 0 1 1 ? *"  # Triggers at midnight on January 1st every year (executes once per year)
+      podTemplatePath: /etc/cron-templates/layout-cachenator-pod.yaml
+      state: off
+    - name: layout-generator
+      schedule: "30 0/3 * * ? *"  # Triggers at minute 30 of every 3 hours (0:30, 3:30, 6:30, etc.)
+      podTemplatePath: /etc/cron-templates/layout-generator-pod.yaml
+      state: on
+    - name: personalised-context-row-generator
+      schedule: "30 0/6 * * ? *"  # Triggers at minute 30 of every 6 hours (0:30, 6:30, 12:30, 18:30)
+      podTemplatePath: /etc/cron-templates/personalised-context-row-generator-pod.yaml
+      state: on
+    - name: placeholder-row-generator
+      schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
+      podTemplatePath: /etc/cron-templates/placeholder-row-generator-pod.yaml
+      state: on
+    - name: rule-based-row-generator
+      schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
+      podTemplatePath: /etc/cron-templates/rule-based-row-generator-pod.yaml
+      state: on
+    - name: user-context-rule-row-generator
+      schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
+      podTemplatePath: /etc/cron-templates/user-context-rule-row-generator-pod.yaml
+      state: off
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -51,15 +108,6 @@ data:
     global:  # Global default rules (effective when no Task match is found)
       success: 3  # Number of successful tasks to retain
       failure: 3  # Number of failed tasks to retain
-    tasks:  # Task-level configuration (higher priority than global)
-      - taskSelector:  # Label selector to match specific Task
-          cron-dispatcher.io/task-name: "custom-row-generator"  # Task name
-        success: 5  # Retain 5 successful tasks for this Task
-        failure: 2  # Retain 2 failed tasks for this Task
-      - taskSelector:
-          cron-dispatcher.io/task-name: "layout-generator"  # Task name
-        success: 10  # Retain 10 successful tasks
-        failure: 5  # Retain 5 failed tasks
     labelSelector:
       matchLabels:
         app.kubernetes.io/managed-by: CronDispatcher # Filter Pods managed by CronDispatcher
@@ -77,157 +125,8 @@ data:
     global:  # Global default rules (effective when no Task match is found)
       success: 3  # Number of successful tasks to retain
       failure: 3  # Number of failed tasks to retain
-    tasks:  # Task-level configuration (higher priority than global)
-      - taskSelector:  # Label selector to match specific Task
-          cron-dispatcher.io/task-name: "epg-ingest-scheduler"  # Task name
-        success: 7  # Retain 7 successful tasks for this Task
-        failure: 3  # Retain 3 failed tasks for this Task
-      - taskSelector:
-          cron-dispatcher.io/task-name: "imdb-ingest-scheduler"  # Task name
-        success: 5  # Retain 5 successful tasks
-        failure: 2  # Retain 2 failed tasks
     labelSelector:
       matchLabels:
         app.kubernetes.io/managed-by: CronDispatcher # Filter Pods managed by CronDispatcher
     cleanupInterval: "60m"  # Cleanup task execution interval (every 60 minutes)
     timeToLive: "1h"       # Maximum survival time for Pods exceeding retention count (retain for 1 hour)
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cron-templates
-  namespace: default  # Modify according to actual namespace
-  labels:
-    app: cron-dispatcher
-    config-type: pod-templates
-data:
-  example-task-1-pod.yaml: |
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: example-task-1  # Will be automatically replaced by CronDispatcher
-      labels:
-        task-type: example
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: task-container
-        image: busybox:latest
-        command: ["sh", "-c"]
-        args:
-        - |
-          echo "Executing example task 1..."
-          echo "Current time: $(date)"
-          echo "Task completed"
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "100m"
-            
-  example-task-2-pod.yaml: |
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: example-task-2  # Will be automatically replaced by CronDispatcher
-      labels:
-        task-type: example
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: task-container
-        image: alpine:latest
-        command: ["sh", "-c"]
-        args:
-        - |
-          echo "Executing example task 2..."
-          sleep 10
-          echo "Task 2 completed"
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "100m"
-            
-  daily-cleanup-pod.yaml: |
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: daily-cleanup  # Will be automatically replaced by CronDispatcher
-      labels:
-        task-type: cleanup
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: cleanup-container
-        image: busybox:latest
-        command: ["sh", "-c"]
-        args:
-        - |
-          echo "Starting daily cleanup task..."
-          echo "Cleaning temporary files..."
-          echo "Cleanup completed"
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "100m"
-            
-  weekly-report-pod.yaml: |
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: weekly-report  # Will be automatically replaced by CronDispatcher
-      labels:
-        task-type: report
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: report-container
-        image: busybox:latest
-        command: ["sh", "-c"]
-        args:
-        - |
-          echo "Generating weekly report..."
-          echo "Collecting data..."
-          echo "Weekly report generation completed"
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
-            
-  monthly-backup-pod.yaml: |
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: monthly-backup  # Will be automatically replaced by CronDispatcher
-      labels:
-        task-type: backup
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: backup-container
-        image: busybox:latest
-        command: ["sh", "-c"]
-        args:
-        - |
-          echo "Starting monthly backup..."
-          echo "Backing up data..."
-          echo "Backup completed"
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m" 
