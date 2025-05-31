@@ -10,7 +10,16 @@ CACHE_FILE="/tmp/.cron-dispatcher-health-cache"
 
 # Check crond service status (critical check - always performed)
 check_crond() {
-    if systemctl is-active --quiet crond 2>/dev/null; then
+    # Check if crond PID file exists and process is running
+    if [ -f "/var/run/crond.pid" ]; then
+        local crond_pid=$(cat /var/run/crond.pid 2>/dev/null)
+        if [ -n "$crond_pid" ] && kill -0 "$crond_pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    
+    # Fallback: check if any crond process is running
+    if pgrep -x "crond" > /dev/null 2>&1; then
         return 0
     else
         echo "[FAIL] crond service is not running" >&2
@@ -20,11 +29,33 @@ check_crond() {
 
 # Check if main application process is running
 check_main_process() {
-    if pgrep -f "python.*main.py" > /dev/null 2>&1; then
-        return 0
+    # Check if main app PID file exists and process is running
+    if [ -f "/var/run/cron-dispatcher.pid" ]; then
+        local main_pid=$(cat /var/run/cron-dispatcher.pid 2>/dev/null)
+        if [ -n "$main_pid" ] && kill -0 "$main_pid" 2>/dev/null; then
+            echo "[PASS] CronDispatcher main process is running (PID: $main_pid)"
+            return 0
+        else
+            echo "[WARN] Main app PID file exists but process not found, checking for any main.py process..."
+            if pgrep -f "python.*main.py" > /dev/null 2>&1; then
+                local actual_pid=$(pgrep -f "python.*main.py")
+                echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+                return 0
+            else
+                echo "[WARN] CronDispatcher main process not found"
+                return 1
+            fi
+        fi
     else
-        echo "[WARN] CronDispatcher main process not found" >&2
-        return 1
+        echo "[WARN] Main app PID file not found, checking for any main.py process..."
+        if pgrep -f "python.*main.py" > /dev/null 2>&1; then
+            local actual_pid=$(pgrep -f "python.*main.py")
+            echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+            return 0
+        else
+            echo "[WARN] CronDispatcher main process not found"
+            return 1
+        fi
     fi
 }
 
@@ -106,18 +137,53 @@ verbose_check() {
     local exit_code=0
     
     # Check crond service
-    if systemctl is-active --quiet crond 2>/dev/null; then
-        echo "[PASS] crond service is running"
+    if [ -f "/var/run/crond.pid" ]; then
+        local crond_pid=$(cat /var/run/crond.pid 2>/dev/null)
+        if [ -n "$crond_pid" ] && kill -0 "$crond_pid" 2>/dev/null; then
+            echo "[PASS] crond service is running (PID: $crond_pid)"
+        else
+            echo "[WARN] crond PID file exists but process not found, checking for any crond process..."
+            if pgrep -x "crond" > /dev/null 2>&1; then
+                local actual_pid=$(pgrep -x "crond")
+                echo "[PASS] crond service is running (PID: $actual_pid)"
+            else
+                echo "[FAIL] crond service is not running"
+                exit_code=1
+            fi
+        fi
     else
-        echo "[FAIL] crond service is not running"
-        exit_code=1
+        echo "[WARN] crond PID file not found, checking for any crond process..."
+        if pgrep -x "crond" > /dev/null 2>&1; then
+            local actual_pid=$(pgrep -x "crond")
+            echo "[PASS] crond service is running (PID: $actual_pid)"
+        else
+            echo "[FAIL] crond service is not running"
+            exit_code=1
+        fi
     fi
     
     # Check main process
-    if pgrep -f "python.*main.py" > /dev/null 2>&1; then
-        echo "[PASS] CronDispatcher main process is running"
+    if [ -f "/var/run/cron-dispatcher.pid" ]; then
+        local main_pid=$(cat /var/run/cron-dispatcher.pid 2>/dev/null)
+        if [ -n "$main_pid" ] && kill -0 "$main_pid" 2>/dev/null; then
+            echo "[PASS] CronDispatcher main process is running (PID: $main_pid)"
+        else
+            echo "[WARN] Main app PID file exists but process not found, checking for any main.py process..."
+            if pgrep -f "python.*main.py" > /dev/null 2>&1; then
+                local actual_pid=$(pgrep -f "python.*main.py")
+                echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+            else
+                echo "[WARN] CronDispatcher main process not found"
+            fi
+        fi
     else
-        echo "[WARN] CronDispatcher main process not found"
+        echo "[WARN] Main app PID file not found, checking for any main.py process..."
+        if pgrep -f "python.*main.py" > /dev/null 2>&1; then
+            local actual_pid=$(pgrep -f "python.*main.py")
+            echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+        else
+            echo "[WARN] CronDispatcher main process not found"
+        fi
     fi
     
     # Check directories

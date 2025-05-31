@@ -38,6 +38,12 @@ CronDispatcher is a Kubernetes namespace-level cron job management platform that
    - ccictl configuration and authentication
    - Connection testing and validation
 
+5. **Process Manager** (`scripts/process_manager.sh`)
+   - Container-friendly service management
+   - Direct crond process management (no systemctl dependency)
+   - Process monitoring and automatic restart
+   - Graceful shutdown handling
+
 ### Deployment Architecture
 
 ```
@@ -212,11 +218,18 @@ ccictl apply -f config/deployment.yaml
 
 ### Health Checks
 
-CronDispatcher includes comprehensive health monitoring:
+CronDispatcher includes comprehensive health monitoring with container-friendly architecture:
 
-- **Liveness Probe**: Monitors crond service and main process
+- **Liveness Probe**: Monitors crond service and main process (no systemctl dependency)
 - **Readiness Probe**: Validates configuration and dependencies
+- **Process Management**: Built-in process monitoring and automatic restart
 - **Manual Health Check**: `health_check.sh --verbose`
+
+**Container-Friendly Features**:
+- Direct process management without systemd
+- PID-based process monitoring
+- Automatic service recovery
+- Graceful shutdown handling
 
 ## Pod Labeling
 

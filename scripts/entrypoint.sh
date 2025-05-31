@@ -13,24 +13,6 @@ if [ -n "$CRON_TIMEZONE" ]; then
     echo $CRON_TIMEZONE > /etc/timezone
 fi
 
-# Initialize crontab
-echo "Initializing crontab..."
-touch /var/spool/cron/root
-chmod 600 /var/spool/cron/root
-
-# Start crond service
-echo "Starting crond service..."
-systemctl start crond
-systemctl enable crond
-
-# Check if crond service is running
-if systemctl is-active --quiet crond; then
-    echo "[PASS] crond service started successfully"
-else
-    echo "[FAIL] crond service failed to start"
-    exit 1
-fi
-
 # Display configuration information
 echo "=== CronDispatcher Configuration ==="
 echo "Namespace: ${NAMESPACE:-default}"
@@ -42,6 +24,6 @@ echo "GC Policy Directory: /etc/cron-dispatcher-gc-policy"
 echo "Pod Definitions: Retrieved from ConfigMaps using ccictl"
 echo "=================================="
 
-# Start main CronDispatcher application
-echo "Starting CronDispatcher main application..."
-exec python3 /app/src/main.py 
+# Start CronDispatcher using process manager
+echo "Starting CronDispatcher with process manager..."
+exec /app/scripts/process_manager.sh start

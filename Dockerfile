@@ -11,7 +11,7 @@ ENV CRON_TIMEZONE=UTC
 RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \
     sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-* && \
     yum update -y && \
-    yum install -y python3 python3-pip cronie curl wget unzip systemd && \
+    yum install -y python3 python3-pip cronie curl wget unzip procps-ng && \
     yum clean all
 
 # Create application directory
@@ -28,7 +28,9 @@ RUN curl -L -o /usr/local/bin/ccictl "https://cci-kubectl.obs.cn-north-1.myhuawe
 # Create necessary directories
 RUN mkdir -p /var/log/cron-dispatcher && \
     mkdir -p /etc/cron-dispatcher-config && \
-    mkdir -p /etc/cron-dispatcher-gc-policy
+    mkdir -p /etc/cron-dispatcher-gc-policy && \
+    mkdir -p /var/run && \
+    mkdir -p /var/spool/cron
 
 # Copy application code
 COPY src/ ./src/
@@ -36,18 +38,17 @@ COPY config/ ./config/
 COPY scripts/ ./scripts/
 
 # Set permissions
-RUN chmod +x src/main.py src/pod_creator.py scripts/entrypoint.sh && \
+RUN chmod +x src/main.py src/pod_creator.py scripts/entrypoint.sh scripts/process_manager.sh && \
     chmod 644 /etc/crontab
 
-# Enable crond service logging
-RUN echo "CRONDARGS=-s -m off" >> /etc/sysconfig/crond
+# Configure crond for container environment
+RUN echo "CRONDARGS=-s -m off" >> /etc/sysconfig/crond && \
+    touch /var/spool/cron/root && \
+    chmod 600 /var/spool/cron/root
 
 # Create health check script
 COPY scripts/health_check.sh /usr/local/bin/health_check.sh
 RUN chmod +x /usr/local/bin/health_check.sh
-
-# Create systemd environment
-RUN systemctl enable crond
 
 # Health check (using script-based check)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
