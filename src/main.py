@@ -13,7 +13,6 @@ import subprocess
 from typing import Dict, List, Optional
 
 from crontab import CronTab
-from croniter import croniter
 from pod_cleaner import PodCleaner
 from cci_auth_manager import CCIAuthManager
 
@@ -139,7 +138,13 @@ class CronDispatcher:
         try:
             # Convert Quartz format to standard cron format
             standard_expr = self._convert_quartz_to_cron(cron_expr)
-            croniter(standard_expr)
+            
+            # Create a temporary cron job to validate the expression
+            temp_cron = CronTab()
+            temp_job = temp_cron.new(command='echo test')
+            temp_job.setall(standard_expr)
+            
+            # If we get here without exception, the expression is valid
             return True
         except Exception as e:
             logger.error(f"Invalid cron expression '{cron_expr}': {e}")

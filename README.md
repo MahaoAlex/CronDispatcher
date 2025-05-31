@@ -354,8 +354,9 @@ ccictl exec deployment/cron-dispatcher -- crontab -l
 
 ## Dependencies
 
-```
-PyYAML==6.0.1
-croniter==2.0.1
-python-crontab==3.0.0
-```
+### Python Dependencies
+
+- **PyYAML==6.0.1**: YAML configuration parsing
+- **python-crontab==2.7.1**: Cron expression parsing and validation
+- **python-dateutil==2.8.2**: Date and time utilities
+- **requests==2.31.0**: HTTP client for API calls
