@@ -146,14 +146,122 @@ validate_python_dependencies() {
         return 0
     fi
     
-    # Check requirements.txt syntax
-    if ! python3 -m pip install --dry-run -r requirements.txt &> /dev/null; then
-        print_error "Invalid requirements.txt format or unreachable dependencies"
-        print_info "Please check requirements.txt for syntax errors or network connectivity"
+    # Display Python and pip version information
+    print_info "Environment information:"
+    local python_version=$(python3 --version 2>&1)
+    print_info "  Python: $python_version"
+    
+    if command -v pip3 &> /dev/null; then
+        local pip_version=$(pip3 --version 2>&1)
+        print_info "  Pip: $pip_version"
+    else
+        print_warning "  Pip3 not found, using python3 -m pip"
+    fi
+    
+    # Check pip functionality
+    if ! python3 -m pip --version &> /dev/null; then
+        print_error "pip module is not working properly"
         exit 1
     fi
     
-    print_success "Python dependencies validation passed"
+    # Check if requirements.txt exists
+    if [[ ! -f "requirements.txt" ]]; then
+        print_error "requirements.txt file not found"
+        exit 1
+    fi
+    
+    # Display requirements.txt content
+    print_info "Contents of requirements.txt:"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ -n "$line" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
+            print_info "  $line"
+        fi
+    done < requirements.txt
+    
+    print_info "Checking requirements.txt syntax..."
+    
+    # First, try to validate the entire requirements.txt file
+    if python3 -m pip install --dry-run -r requirements.txt &> /dev/null; then
+        print_success "Python dependencies validation passed"
+        return 0
+    fi
+    
+    # If overall validation fails, check each dependency individually
+    print_warning "Overall requirements.txt validation failed, checking individual dependencies..."
+    
+    local failed_deps=()
+    local success_count=0
+    local total_count=0
+    
+    # Read requirements.txt line by line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip empty lines and comments
+        if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+        
+        # Clean up the line (remove leading/trailing whitespace)
+        line=$(echo "$line" | xargs)
+        
+        # Skip if still empty after cleanup
+        if [[ -z "$line" ]]; then
+            continue
+        fi
+        
+        total_count=$((total_count + 1))
+        
+        print_info "Checking dependency: $line"
+        
+        # Create a temporary requirements file with just this dependency
+        echo "$line" > /tmp/temp_req.txt
+        
+        # Test this specific dependency
+        if python3 -m pip install --dry-run -r /tmp/temp_req.txt &> /dev/null; then
+            print_success "✓ $line - OK"
+            success_count=$((success_count + 1))
+        else
+            print_error "✗ $line - FAILED"
+            failed_deps+=("$line")
+            
+            # Try to get more detailed error information
+            print_info "Detailed error for $line:"
+            python3 -m pip install --dry-run -r /tmp/temp_req.txt 2>&1 | head -5 | while read -r error_line; do
+                print_info "  $error_line"
+            done
+        fi
+        
+        # Clean up temporary file
+        rm -f /tmp/temp_req.txt
+        
+    done < requirements.txt
+    
+    # Summary report
+    echo
+    print_info "Dependency validation summary:"
+    print_info "Total dependencies checked: $total_count"
+    print_info "Successful: $success_count"
+    print_info "Failed: ${#failed_deps[@]}"
+    
+    if [[ ${#failed_deps[@]} -gt 0 ]]; then
+        echo
+        print_error "The following dependencies failed validation:"
+        for dep in "${failed_deps[@]}"; do
+            print_error "  - $dep"
+        done
+        
+        echo
+        print_info "Possible solutions:"
+        print_info "1. Check network connectivity to PyPI"
+        print_info "2. Verify package names and versions exist"
+        print_info "3. Try using version ranges instead of fixed versions"
+        print_info "4. Check if packages are available in your region"
+        
+        exit 1
+    else
+        print_success "All individual dependencies validated successfully"
+        print_warning "Note: Individual validation passed but combined validation failed"
+        print_info "This might indicate dependency conflicts or version incompatibilities"
+    fi
 }
 
 # Validate Dockerfile
