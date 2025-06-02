@@ -22,7 +22,7 @@ COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Download and install ccictl tool
-RUN curl -L -o /usr/local/bin/ccictl "https://cci-kubectl.obs.cn-north-1.myhuaweicloud.com/ccictl/v1.23.8/linux/amd64/ccictl" && \
+RUN curl -L -o /usr/local/bin/ccictl "https://cci-cn-south-4.obs.cn-south-4.myhuaweicloud.com/ccictl/ccictl" && \
     chmod +x /usr/local/bin/ccictl
 
 # Create necessary directories
