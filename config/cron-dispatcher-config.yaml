@@ -1,4 +1,4 @@
-apiVersion: v1
+apiVersion: cci/v2
 kind: ConfigMap
 metadata:
   name: cron-dispatcher-config
@@ -54,7 +54,7 @@ data:
       podDefinitionConfigmap: vod-ingest-scheduler-template
       state: on
 ---
-apiVersion: v1
+apiVersion: cci/v2
 kind: ConfigMap
 metadata:
   name: cron-dispatcher-config
@@ -102,7 +102,7 @@ data:
       podDefinitionConfigmap: user-context-rule-row-generator-template
       state: off
 ---
-apiVersion: v1
+apiVersion: cci/v2
 kind: ConfigMap
 metadata:
   name: cron-dispatcher-gc-policy
@@ -122,7 +122,7 @@ data:
     cleanupInterval: "60m"  # Cleanup task execution interval (every 60 minutes)
 
 ---
-apiVersion: v1
+apiVersion: cci/v2
 kind: ConfigMap
 metadata:
   name: cron-dispatcher-gc-policy
