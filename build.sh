@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# CronDispatcher Build Preparation Script
+# cron-dispatcher Build Preparation Script
 # Prepares dependencies and resources for Dockerfile build in CodeArts Pipeline
 
 set -e
@@ -35,7 +35,7 @@ print_error() {
 # Show usage
 show_usage() {
     cat << EOF
-CronDispatcher Build Preparation Script
+cron-dispatcher Build Preparation Script
 
 Usage: $0 [OPTIONS]
 
@@ -354,7 +354,7 @@ cleanup_build_artifacts() {
 
 # Main execution
 main() {
-    print_info "CronDispatcher Build Preparation Script"
+    print_info "cron-dispatcher Build Preparation Script"
     print_info "======================================"
     print_info "Skip Validation: $SKIP_VALIDATION"
     echo

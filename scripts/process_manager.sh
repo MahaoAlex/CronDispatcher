@@ -1,5 +1,5 @@
 #!/bin/bash
-# CronDispatcher process manager for container environment
+# cron-dispatcher process manager for container environment
 # This script manages crond and main application processes
 
 set -e
@@ -41,7 +41,7 @@ start_crond() {
 
 # Function to start main application
 start_main_app() {
-    echo "Starting CronDispatcher main application..."
+    echo "Starting cron-dispatcher main application..."
     
     # Ensure log directory exists
     mkdir -p /var/log/cron-dispatcher
@@ -56,10 +56,10 @@ start_main_app() {
     # Verify main application is running
     if kill -0 $main_pid 2>/dev/null; then
         echo $main_pid > $MAIN_APP_PID_FILE
-        echo "[PASS] CronDispatcher main application started successfully (PID: $main_pid)"
+        echo "[PASS] cron-dispatcher main application started successfully (PID: $main_pid)"
         return 0
     else
-        echo "[FAIL] CronDispatcher main application failed to start"
+        echo "[FAIL] cron-dispatcher main application failed to start"
         return 1
     fi
 }
@@ -160,7 +160,7 @@ trap cleanup SIGTERM SIGINT
 # Main execution
 case "${1:-start}" in
     "start")
-        echo "=== CronDispatcher Process Manager ==="
+        echo "=== cron-dispatcher Process Manager ==="
         
         # Start crond
         if ! start_crond; then

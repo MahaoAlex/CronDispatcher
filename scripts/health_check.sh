@@ -1,5 +1,5 @@
 #!/bin/bash
-# CronDispatcher health check script for Kubernetes probes
+# cron-dispatcher health check script for Kubernetes probes
 
 # Exit codes:
 # 0 - healthy
@@ -33,16 +33,16 @@ check_main_process() {
     if [ -f "/var/run/cron-dispatcher.pid" ]; then
         local main_pid=$(cat /var/run/cron-dispatcher.pid 2>/dev/null)
         if [ -n "$main_pid" ] && kill -0 "$main_pid" 2>/dev/null; then
-            echo "[PASS] CronDispatcher main process is running (PID: $main_pid)"
+            echo "[PASS] cron-dispatcher main process is running (PID: $main_pid)"
             return 0
         else
             echo "[WARN] Main app PID file exists but process not found, checking for any main.py process..."
             if pgrep -f "python.*main.py" > /dev/null 2>&1; then
                 local actual_pid=$(pgrep -f "python.*main.py")
-                echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+                echo "[PASS] cron-dispatcher main process is running (PID: $actual_pid)"
                 return 0
             else
-                echo "[WARN] CronDispatcher main process not found"
+                echo "[WARN] cron-dispatcher main process not found"
                 return 1
             fi
         fi
@@ -50,10 +50,10 @@ check_main_process() {
         echo "[WARN] Main app PID file not found, checking for any main.py process..."
         if pgrep -f "python.*main.py" > /dev/null 2>&1; then
             local actual_pid=$(pgrep -f "python.*main.py")
-            echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+            echo "[PASS] cron-dispatcher main process is running (PID: $actual_pid)"
             return 0
         else
-            echo "[WARN] CronDispatcher main process not found"
+            echo "[WARN] cron-dispatcher main process not found"
             return 1
         fi
     fi
@@ -132,7 +132,7 @@ k8s_readiness() {
 
 # Verbose health check for manual use
 verbose_check() {
-    echo "=== CronDispatcher Health Check ==="
+    echo "=== cron-dispatcher Health Check ==="
     
     local exit_code=0
     
@@ -166,23 +166,23 @@ verbose_check() {
     if [ -f "/var/run/cron-dispatcher.pid" ]; then
         local main_pid=$(cat /var/run/cron-dispatcher.pid 2>/dev/null)
         if [ -n "$main_pid" ] && kill -0 "$main_pid" 2>/dev/null; then
-            echo "[PASS] CronDispatcher main process is running (PID: $main_pid)"
+            echo "[PASS] cron-dispatcher main process is running (PID: $main_pid)"
         else
             echo "[WARN] Main app PID file exists but process not found, checking for any main.py process..."
             if pgrep -f "python.*main.py" > /dev/null 2>&1; then
                 local actual_pid=$(pgrep -f "python.*main.py")
-                echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+                echo "[PASS] cron-dispatcher main process is running (PID: $actual_pid)"
             else
-                echo "[WARN] CronDispatcher main process not found"
+                echo "[WARN] cron-dispatcher main process not found"
             fi
         fi
     else
         echo "[WARN] Main app PID file not found, checking for any main.py process..."
         if pgrep -f "python.*main.py" > /dev/null 2>&1; then
             local actual_pid=$(pgrep -f "python.*main.py")
-            echo "[PASS] CronDispatcher main process is running (PID: $actual_pid)"
+            echo "[PASS] cron-dispatcher main process is running (PID: $actual_pid)"
         else
-            echo "[WARN] CronDispatcher main process not found"
+            echo "[WARN] cron-dispatcher main process not found"
         fi
     fi
     

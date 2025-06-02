@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CronDispatcher - Kubernetes namespace-level cron job management platform
+cron-dispatcher - Kubernetes namespace-level cron job management platform
 Declarative configuration mode driven by ConfigMap, implementing containerized orchestration and lifecycle management of scheduled tasks
 """
 
@@ -25,10 +25,10 @@ logging.basicConfig(
         logging.FileHandler('/var/log/cron-dispatcher/dispatcher.log')
     ]
 )
-logger = logging.getLogger('CronDispatcher')
+logger = logging.getLogger('cron-dispatcher')
 
-class CronDispatcher:
-    """CronDispatcher main class"""
+class cron-dispatcher:
+    """cron-dispatcher main class"""
     
     def __init__(self):
         self.namespace = os.getenv('NAMESPACE', 'default')
@@ -64,7 +64,7 @@ class CronDispatcher:
         # Initialize CCI Authentication Manager
         self.cci_auth = self._initialize_cci_auth()
         
-        logger.info(f"CronDispatcher initialized - Namespace: {self.namespace}, Timezone: {self.timezone}")
+        logger.info(f"cron-dispatcher initialized - Namespace: {self.namespace}, Timezone: {self.timezone}")
         logger.info(f"Configuration directory: {self.config_dir}")
         logger.info(f"Garbage Collection - Dry Run: {self.gc_dry_run}, Batch Size: {self.gc_batch_size}")
         logger.info(f"CCI Region: {self.region}")
@@ -110,7 +110,7 @@ class CronDispatcher:
             'tasks': [],
             'labelSelector': {
                 'matchLabels': {
-                    'app.kubernetes.io/managed-by': 'CronDispatcher'
+                    'app.kubernetes.io/managed-by': 'cron-dispatcher'
                 }
             },
             'cleanupInterval': '5m',
@@ -178,8 +178,8 @@ class CronDispatcher:
     def update_crontab(self, tasks: List[Dict]):
         """Update system crontab"""
         try:
-            # Remove existing CronDispatcher tasks
-            self.cron.remove_all(comment='CronDispatcher')
+            # Remove existing cron-dispatcher tasks
+            self.cron.remove_all(comment='cron-dispatcher')
             
             active_tasks = 0
             for task in tasks:
@@ -223,7 +223,7 @@ class CronDispatcher:
         # Convert cron expression and create job
         standard_cron = self._convert_quartz_to_cron(schedule)
         command = f"python3 /app/src/pod_creator.py {name} {configmap_name}"
-        job = self.cron.new(command=command, comment='CronDispatcher')
+        job = self.cron.new(command=command, comment='cron-dispatcher')
         job.setall(standard_cron)
         
         logger.info(f"Added cron job: {name} - {standard_cron} (ConfigMap: {configmap_name})")
@@ -325,7 +325,7 @@ class CronDispatcher:
     
     def run(self):
         """Main run loop"""
-        logger.info("CronDispatcher starting...")
+        logger.info("cron-dispatcher starting...")
         
         # Initialize CCI authentication
         if not self.initialize_cci_authentication():
@@ -334,7 +334,7 @@ class CronDispatcher:
         # Initial configuration load
         self._load_and_apply_config()
         
-        logger.info("CronDispatcher started successfully")
+        logger.info("cron-dispatcher started successfully")
         
         # Main monitoring loop
         while True:
@@ -356,7 +356,7 @@ class CronDispatcher:
                 logger.error(f"Error in main loop: {e}")
                 time.sleep(30)
         
-        logger.info("CronDispatcher stopped")
+        logger.info("cron-dispatcher stopped")
     
     def _load_and_apply_config(self):
         """Load and apply configuration"""
@@ -377,7 +377,7 @@ class CronDispatcher:
 
 def main():
     """Main function"""
-    dispatcher = CronDispatcher()
+    dispatcher = cron-dispatcher()
     dispatcher.run()
 
 if __name__ == '__main__':

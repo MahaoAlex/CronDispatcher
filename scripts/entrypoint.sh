@@ -1,5 +1,5 @@
 #!/bin/bash
-# CronDispatcher container startup script
+# cron-dispatcher container startup script
 
 set -e
 
@@ -14,7 +14,7 @@ if [ -n "$CRON_TIMEZONE" ]; then
 fi
 
 # Display configuration information
-echo "=== CronDispatcher Configuration ==="
+echo "=== cron-dispatcher Configuration ==="
 echo "Namespace: ${NAMESPACE:-default}"
 echo "Timezone: ${CRON_TIMEZONE:-UTC}"
 echo "GC Dry Run: ${GC_DRY_RUN:-false}"
@@ -24,6 +24,6 @@ echo "GC Policy Directory: /etc/cron-dispatcher-gc-policy"
 echo "Pod Definitions: Retrieved from ConfigMaps using ccictl"
 echo "=================================="
 
-# Start CronDispatcher using process manager
-echo "Starting CronDispatcher with process manager..."
+# Start cron-dispatcher using process manager
+echo "Starting cron-dispatcher with process manager..."
 exec /app/scripts/process_manager.sh start

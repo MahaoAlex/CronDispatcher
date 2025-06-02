@@ -102,10 +102,10 @@ class PodCreator:
             if 'labels' not in pod_template['metadata']:
                 pod_template['metadata']['labels'] = {}
             
-            # Essential labels for CronDispatcher
+            # Essential labels for cron-dispatcher
             pod_template['metadata']['labels'].update({
                 'app.kubernetes.io/name': task_name,
-                'app.kubernetes.io/managed-by': 'CronDispatcher',
+                'app.kubernetes.io/managed-by': 'cron-dispatcher',
                 'cron-dispatcher.io/task-name': task_name,
                 'cron-dispatcher.io/instance': pod_name
             })
@@ -115,7 +115,7 @@ class PodCreator:
                 pod_template['metadata']['annotations'] = {}
             
             pod_template['metadata']['annotations'].update({
-                'cron-dispatcher.io/created-by': 'CronDispatcher',
+                'cron-dispatcher.io/created-by': 'cron-dispatcher',
                 'cron-dispatcher.io/creation-time': datetime.utcnow().isoformat() + 'Z',
                 'cron-dispatcher.io/source-configmap': configmap_name
             })

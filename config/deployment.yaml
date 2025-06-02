@@ -4,30 +4,31 @@ metadata:
   name: cron-dispatcher
   namespace: cv-cd-generators  # Update this namespace according to your deployment requirements
   labels:
+    app.kubernetes.io/managed-by: cron-dispatcher
     app.kubernetes.io/name: cron-dispatcher
-    app.kubernetes.io/managed-by: CronDispatcher
     cron-dispatcher.io/component: dispatcher
 spec:
   replicas: 1
   selector:
     matchLabels:
+      app.kubernetes.io/managed-by: cron-dispatcher
       app.kubernetes.io/name: cron-dispatcher
       cron-dispatcher.io/component: dispatcher
   template:
     metadata:
       creationTimestamp: null
       labels:
+        app.kubernetes.io/managed-by: cron-dispatcher
         app.kubernetes.io/name: cron-dispatcher
-        app.kubernetes.io/managed-by: CronDispatcher
         cron-dispatcher.io/component: dispatcher
       annotations:  # Update LTS stream configuration according to your logging requirements
         logconf.k8s.io/fluent-bit-log-type: lts
         logconfigs.logging.openvessel.io: '{"default-config":{"container_files":{"container-0":"stdout.log;/var/log/cron-dispatcher/*.log"},"regulation":"","lts-log-info":{"cc885264-61e5-4301-aad6-699c3fbf0a36":"e7b54433-3fd4-4a69-88c6-e73d17feb969"}}}'
-        resource.cci.io/pod-size-specs: 1.00_2.0
+        resource.cci.io/pod-size-specs: 2.00_4.0
     spec:
       containers:
       - name: default
-        image: swr.af-south-1.myhuaweicloud.com/content-discovery/cron-dispatcher:latest  # Update with your actual image registry address
+        image: swr.af-south-1.myhuaweicloud.com/content-discovery/cron-dispatcher:20250602161533.d5b58302  # Update with your actual image registry address
         resources:
           limits:
             cpu: '0'

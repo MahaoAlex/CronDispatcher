@@ -1,8 +1,8 @@
-# CronDispatcher Test Cases
+# cron-dispatcher Test Cases
 
 ## Overview
 
-This document outlines comprehensive test cases for the CronDispatcher project, covering all major functionality including configuration management, Pod creation, garbage collection, and error handling scenarios.
+This document outlines comprehensive test cases for the cron-dispatcher project, covering all major functionality including configuration management, Pod creation, garbage collection, and error handling scenarios.
 
 ## Test Environment Setup
 
@@ -282,11 +282,11 @@ ccictl create secret generic cci-credentials \
 ### 9. Complete Workflow Tests
 
 #### Test Case 9.1: Full Deployment and Execution
-**Objective**: Verify complete CronDispatcher workflow
+**Objective**: Verify complete cron-dispatcher workflow
 **Input**: Complete deployment configuration
 **Expected Result**: Tasks scheduled and executed successfully
 **Test Steps**:
-1. Deploy CronDispatcher with test configuration
+1. Deploy cron-dispatcher with test configuration
 2. Verify deployment is healthy
 3. Verify tasks are scheduled in crontab
 4. Wait for task execution time
@@ -325,7 +325,7 @@ ccictl create secret generic cci-credentials \
 **Expected Result**: All tasks processed within acceptable time
 **Test Steps**:
 1. Create configuration with 100+ tasks
-2. Deploy CronDispatcher
+2. Deploy cron-dispatcher
 3. Measure configuration load time
 4. Verify all tasks are scheduled
 5. Monitor resource usage
@@ -372,7 +372,7 @@ ccictl create secret generic cci-credentials \
 **Test Steps**:
 1. Deploy in specific namespace
 2. Create resources in other namespaces
-3. Verify CronDispatcher only affects target namespace
+3. Verify cron-dispatcher only affects target namespace
 4. Verify no cross-namespace access
 
 #### Test Case 11.3: RBAC Compliance
@@ -381,7 +381,7 @@ ccictl create secret generic cci-credentials \
 **Expected Result**: Operations succeed with minimal permissions
 **Test Steps**:
 1. Configure minimal RBAC permissions
-2. Deploy CronDispatcher
+2. Deploy cron-dispatcher
 3. Verify all operations work
 4. Verify no permission escalation
 
@@ -455,7 +455,7 @@ data:
         failure: 3
     labelSelector:
       matchLabels:
-        app.kubernetes.io/managed-by: CronDispatcher
+        app.kubernetes.io/managed-by: cron-dispatcher
     cleanupInterval: "2m"
 ```
 

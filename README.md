@@ -1,8 +1,8 @@
-# CronDispatcher
+# cron-dispatcher
 
 ## Overview
 
-CronDispatcher is a Kubernetes namespace-level cron job management platform that implements containerized orchestration and lifecycle management of scheduled tasks through a declarative configuration mode driven by ConfigMap. It provides a robust, scalable solution for managing scheduled workloads in CCI 2.0 environments.
+cron-dispatcher is a Kubernetes namespace-level cron job management platform that implements containerized orchestration and lifecycle management of scheduled tasks through a declarative configuration mode driven by ConfigMap. It provides a robust, scalable solution for managing scheduled workloads in CCI 2.0 environments.
 
 ## Key Features
 
@@ -18,7 +18,7 @@ CronDispatcher is a Kubernetes namespace-level cron job management platform that
 
 ### Core Components
 
-1. **CronDispatcher Main Service** (`main.py`)
+1. **cron-dispatcher Main Service** (`main.py`)
    - Configuration management and hot updates
    - Crontab synchronization and task scheduling
    - CCI authentication and Pod lifecycle management
@@ -51,7 +51,7 @@ CronDispatcher is a Kubernetes namespace-level cron job management platform that
 │                    Kubernetes Namespace                     │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────────┐    ┌──────────────────────────────────┐ │
-│  │ CronDispatcher  │    │         ConfigMaps               │ │
+│  │ cron-dispatcher  │    │         ConfigMaps               │ │
 │  │   Deployment    │◄───┤ • cron-dispatcher-config         │ │
 │  │                 │    │ • cron-dispatcher-gc-policy      │ │
 │  │                 │    │ • pod-definition-templates       │ │
@@ -155,7 +155,7 @@ data:
         failure: 5
     labelSelector:
       matchLabels:
-        app.kubernetes.io/managed-by: CronDispatcher
+        app.kubernetes.io/managed-by: cron-dispatcher
     cleanupInterval: "60m"  # Run cleanup every hour
 ```
 
@@ -211,14 +211,14 @@ ccictl apply -f config/cron-dispatcher-config.yaml
 ccictl apply -f config/cron-dispatcher-gc-policy.yaml
 ```
 
-3. **Deploy CronDispatcher**:
+3. **Deploy cron-dispatcher**:
 ```bash
 ccictl apply -f config/deployment.yaml
 ```
 
 ### Health Checks
 
-CronDispatcher includes comprehensive health monitoring with container-friendly architecture:
+cron-dispatcher includes comprehensive health monitoring with container-friendly architecture:
 
 - **Liveness Probe**: Monitors crond service and main process (no systemctl dependency)
 - **Readiness Probe**: Validates configuration and dependencies
@@ -233,25 +233,25 @@ CronDispatcher includes comprehensive health monitoring with container-friendly 
 
 ## Pod Labeling
 
-All Pods created by CronDispatcher include standardized labels:
+All Pods created by cron-dispatcher include standardized labels:
 
 ```yaml
 metadata:
   name: "task-name-abc123def"
   labels:
     app.kubernetes.io/name: "task-name"
-    app.kubernetes.io/managed-by: "CronDispatcher"
+    app.kubernetes.io/managed-by: "cron-dispatcher"
     cron-dispatcher.io/task-name: "task-name"
     cron-dispatcher.io/instance: "task-name-abc123def"
   annotations:
-    cron-dispatcher.io/created-by: "CronDispatcher"
+    cron-dispatcher.io/created-by: "cron-dispatcher"
     cron-dispatcher.io/creation-time: "2024-12-01T12:00:00Z"
     cron-dispatcher.io/source-configmap: "task-template-name"
 ```
 
 ## Hot Configuration Updates
 
-CronDispatcher automatically detects and applies configuration changes:
+cron-dispatcher automatically detects and applies configuration changes:
 
 - **Detection Frequency**: Every 30 seconds
 - **Supported Changes**: Task addition, removal, modification, and GC policy updates
@@ -318,7 +318,7 @@ Comprehensive logging across all components:
 ### Debugging Commands
 
 ```bash
-# Check CronDispatcher status
+# Check cron-dispatcher status
 ccictl logs deployment/cron-dispatcher
 
 # Verify configuration

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pod Cleaner - Responsible for garbage collection and cleanup of CronDispatcher managed Pods
+Pod Cleaner - Responsible for garbage collection and cleanup of cron-dispatcher managed Pods
 """
 
 import os
@@ -27,8 +27,8 @@ class PodCleaner:
     def cleanup_pods(self, gc_policy: Dict) -> int:
         """Clean up expired Pods with garbage collection using ccictl"""
         try:
-            # Get Pods managed by CronDispatcher using ccictl
-            cmd = f"ccictl get pods -n {self.namespace} -l app.kubernetes.io/managed-by=CronDispatcher -o yaml"
+            # Get Pods managed by cron-dispatcher using ccictl
+            cmd = f"ccictl get pods -n {self.namespace} -l app.kubernetes.io/managed-by=cron-dispatcher -o yaml"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             if result.returncode != 0:
