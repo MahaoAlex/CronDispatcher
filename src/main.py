@@ -198,7 +198,15 @@ class cron-dispatcher:
         name = task.get('name')
         schedule = task.get('schedule')
         configmap_name = task.get('podDefinitionConfigmap')
-        state = task.get('state', 'on').lower()
+        
+        # Handle state field - convert boolean to string if necessary
+        state_value = task.get('state', 'on')
+        if isinstance(state_value, bool):
+            # Convert boolean to string: True -> 'on', False -> 'off'
+            state = 'on' if state_value else 'off'
+        else:
+            # Convert string to lowercase
+            state = str(state_value).lower()
         
         # Skip disabled tasks
         if state != 'on':

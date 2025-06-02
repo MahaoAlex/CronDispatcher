@@ -12,47 +12,47 @@ data:
     - name: bouquets-ingest-scheduler
       schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
       podDefinitionConfigmap: bouquets-ingest-scheduler-template
-      state: off
+      state: "off"
     - name: boxoffice-ingest-scheduler
       schedule: "0 */6 * * ? MON-FRI"  # Triggers at minute 0 every 6 hours, Monday to Friday (0:00, 6:00, 12:00, 18:00)
       podDefinitionConfigmap: boxoffice-ingest-scheduler-template
-      state: on
+      state: "on"
     - name: bulk-agnostic-vod-ingest-scheduler
       schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
       podDefinitionConfigmap: bulk-agnostic-vod-ingest-scheduler-template
-      state: off
+      state: "off"
     - name: epg-channels-ingest-scheduler
       schedule: "45 12 * * ? *"  # Triggers at 12:45 PM every day
       podDefinitionConfigmap: epg-channels-ingest-scheduler-template
-      state: off
+      state: "off"
     - name: epg-ingest-scheduler
       schedule: "0 6 * * ? *"  # Triggers at 6:00 AM every day
       podDefinitionConfigmap: epg-ingest-scheduler-template
-      state: on
+      state: "on"
     - name: exploraapps-ingest-scheduler
       schedule: "59 12 * * ? *"  # Triggers at 12:59 PM every day
       podDefinitionConfigmap: exploraapps-ingest-scheduler-template
-      state: off
+      state: "off"
     - name: gotv-ingest-scheduler
       schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
       podDefinitionConfigmap: gotv-ingest-scheduler-template
-      state: on
+      state: "on"
     - name: imdb-ingest-scheduler
       schedule: "15 19 * * ? *"  # Triggers at 7:15 PM every day
       podDefinitionConfigmap: imdb-ingest-scheduler-template
-      state: on
+      state: "on"
     - name: movielens-ingest-scheduler
       schedule: "0 6 ? * MON-FRI *"  # Triggers at 6:00 AM, Monday to Friday
       podDefinitionConfigmap: movielens-ingest-scheduler-template
-      state: off
+      state: "off"
     - name: showmax-ingest-scheduler
       schedule: "55 20 * * ? *"  # Triggers at 8:55 PM every day
       podDefinitionConfigmap: showmax-ingest-scheduler-template
-      state: off
+      state: "off"
     - name: vod-ingest-scheduler
       schedule: "30 */1 * * ? *"  # Triggers at minute 30 of every hour, executes once per hour (30-minute delay)
       podDefinitionConfigmap: vod-ingest-scheduler-template
-      state: on
+      state: "on"
 ---
 apiVersion: cci/v2
 kind: ConfigMap
@@ -68,39 +68,39 @@ data:
     - name: custom-row-generator
       schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
       podDefinitionConfigmap: custom-row-generator-template
-      state: on
+      state: "on"
     - name: delta-rule-based-row-generator
       schedule: "6 0/1 * * ? *"  # Triggers at minute 6 of every hour, executes once per hour (6-minute delay)
       podDefinitionConfigmap: delta-rule-based-row-generator-template
-      state: on
+      state: "on"
     - name: editorial-row-generator
       schedule: "0/30 * * * *"  # Triggers every 30 minutes (at 0 and 30 minutes)
       podDefinitionConfigmap: editorial-row-generator-template
-      state: on
+      state: "on"
     - name: layout-cachenator
       schedule: "0 0 1 1 ? *"  # Triggers at midnight on January 1st every year (executes once per year)
       podDefinitionConfigmap: layout-cachenator-template
-      state: off
+      state: "off"
     - name: layout-generator
       schedule: "30 0/3 * * ? *"  # Triggers at minute 30 of every 3 hours (0:30, 3:30, 6:30, etc.)
       podDefinitionConfigmap: layout-generator-template
-      state: on
+      state: "on"
     - name: personalised-context-row-generator
       schedule: "30 0/6 * * ? *"  # Triggers at minute 30 of every 6 hours (0:30, 6:30, 12:30, 18:30)
       podDefinitionConfigmap: personalised-context-row-generator-template
-      state: on
+      state: "on"
     - name: placeholder-row-generator
       schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
       podDefinitionConfigmap: placeholder-row-generator-template
-      state: on
+      state: "on"
     - name: rule-based-row-generator
       schedule: "0 0/1 * * ? *"  # Triggers at minute 0 of every hour, executes once per hour
       podDefinitionConfigmap: rule-based-row-generator-template
-      state: on
+      state: "on"
     - name: user-context-rule-row-generator
       schedule: "30 1 * * ? *"  # Triggers at 1:30 AM every day (executes once per day)
       podDefinitionConfigmap: user-context-rule-row-generator-template
-      state: off
+      state: "off"
 ---
 apiVersion: cci/v2
 kind: ConfigMap
