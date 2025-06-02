@@ -162,7 +162,7 @@ class CronDispatcher:
         """Validate that the specified ConfigMap exists in the current namespace"""
         try:
             cmd = f"ccictl get configmap {configmap_name} -n {self.namespace}"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode == 0:
                 logger.debug(f"ConfigMap {configmap_name} exists in namespace {self.namespace}")

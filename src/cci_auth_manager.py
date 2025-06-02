@@ -42,7 +42,7 @@ class CCIAuthManager:
                 missing_vars.append(env_var)
         
         if missing_vars:
-            logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+            logger.error("Missing required environment variables: {}".format(', '.join(missing_vars)))
             return False
         
         logger.info("Successfully loaded credentials from environment variables")
@@ -65,13 +65,13 @@ class CCIAuthManager:
         required_keys = ['access_key', 'secret_key', 'domain_name']
         missing_keys = [key for key in required_keys if key not in self.credentials]
         if missing_keys:
-            logger.error(f"Missing required credentials: {', '.join(missing_keys)}")
+            logger.error("Missing required credentials: {}".format(', '.join(missing_keys)))
             return False
         
         try:
             return self._configure_ccictl_commands(region)
         except Exception as e:
-            logger.error(f"Error configuring ccictl: {e}")
+            logger.error("Error configuring ccictl: {}".format(e))
             return False
     
     def _configure_ccictl_commands(self, region: str) -> bool:
@@ -83,7 +83,7 @@ class CCIAuthManager:
                 'name': 'set-cluster',
                 'cmd': [
                     'ccictl', 'config', 'set-cluster', 'cci-cluster',
-                    f'--server=https://cci.{region}.myhuaweicloud.com'
+                    '--server=https://cci.{}.myhuaweicloud.com'.format(region)
                 ]
             },
             {
@@ -91,12 +91,12 @@ class CCIAuthManager:
                 'cmd': [
                     'ccictl', 'config', 'set-credentials', 'cci-user',
                     '--auth-provider=iam',
-                    f'--auth-provider-arg=iam-endpoint=https://iam.{region}.myhuaweicloud.com',
+                    '--auth-provider-arg=iam-endpoint=https://iam.{}.myhuaweicloud.com'.format(region),
                     '--auth-provider-arg=cache=true',
-                    f'--auth-provider-arg=project-name={project_name}',
-                    f'--auth-provider-arg=ak={self.credentials["access_key"]}',
-                    f'--auth-provider-arg=sk={self.credentials["secret_key"]}',
-                    f'--auth-provider-arg=domain-name={self.credentials["domain_name"]}'
+                    '--auth-provider-arg=project-name={}'.format(project_name),
+                    '--auth-provider-arg=ak={}'.format(self.credentials["access_key"]),
+                    '--auth-provider-arg=sk={}'.format(self.credentials["secret_key"]),
+                    '--auth-provider-arg=domain-name={}'.format(self.credentials["domain_name"])
                 ]
             },
             {
@@ -123,11 +123,11 @@ class CCIAuthManager:
     def _execute_command(self, cmd: list, operation: str) -> bool:
         """Execute a single ccictl command"""
         try:
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            logger.debug(f"CCI {operation}: {result.stdout.strip()}")
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
+            logger.debug("CCI {}: {}".format(operation, result.stdout.strip()))
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to {operation}: {e.stderr}")
+            logger.error("Failed to {}: {}".format(operation, e.stderr))
             return False
     
     def test_authentication(self) -> bool:
@@ -142,22 +142,18 @@ class CCIAuthManager:
                 ['ccictl', 'get', 'namespaces'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-                timeout=30
+                universal_newlines=True,
+                check=True
             )
             logger.info("CCI authentication test successful")
-            logger.debug(f"Available namespaces: {result.stdout.strip()}")
+            logger.debug("Available namespaces: {}".format(result.stdout.strip()))
             return True
             
         except subprocess.CalledProcessError as e:
-            logger.error(f"CCI authentication test failed: {e.stderr}")
-            return False
-        except subprocess.TimeoutExpired:
-            logger.error("CCI authentication test timed out")
+            logger.error("CCI authentication test failed: {}".format(e.stderr))
             return False
         except Exception as e:
-            logger.error(f"Error testing CCI authentication: {e}")
+            logger.error("Error testing CCI authentication: {}".format(e))
             return False
     
     def get_credentials_info(self) -> Dict[str, str]:

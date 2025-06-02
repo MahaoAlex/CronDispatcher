@@ -30,7 +30,7 @@ class PodCleaner:
         try:
             # Get Pods managed by cron-dispatcher using ccictl
             cmd = f"ccictl get pods -n {self.namespace} -l app.kubernetes.io/managed-by=cron-dispatcher -o yaml"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode != 0:
                 logger.warning("Failed to get pods for garbage collection")
@@ -171,7 +171,7 @@ class PodCleaner:
         """Delete Pod using ccictl"""
         try:
             cmd = f"ccictl delete pod {pod_name} -n {pod_namespace}"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode == 0:
                 logger.info(f"Deleted Pod {pod_name}: {reason}")
@@ -197,7 +197,7 @@ class PodCleaner:
             
             # Use ccictl to get Pods
             cmd = f"ccictl get pods -n {self.namespace} -l {label_string} -o json"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode != 0:
                 logger.error(f"Failed to get Pods: {result.stderr}")

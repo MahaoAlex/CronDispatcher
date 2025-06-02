@@ -37,7 +37,7 @@ class PodCreator:
         """Retrieve Pod definition from ConfigMap using ccictl"""
         try:
             cmd = f"ccictl get configmap {configmap_name} -n {self.namespace} -o yaml"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode != 0:
                 logger.error(f"Failed to retrieve ConfigMap {configmap_name}: {result.stderr}")
@@ -117,7 +117,7 @@ class PodCreator:
             
             # Use ccictl to create Pod
             cmd = f"ccictl apply -f {temp_file}"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             # Clean up temporary file
             try:
