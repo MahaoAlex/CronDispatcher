@@ -36,44 +36,34 @@ class PodCreator:
     def get_pod_definition_from_configmap(self, configmap_name: str) -> dict:
         """Retrieve Pod definition from ConfigMap using ccictl"""
         try:
-            # Use ccictl to get ConfigMap
-            cmd = f"ccictl get configmap {configmap_name} -n {self.namespace} -o json"
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            cmd = f"ccictl get configmap {configmap_name} -n {self.namespace} -o yaml"
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             if result.returncode != 0:
                 logger.error(f"Failed to retrieve ConfigMap {configmap_name}: {result.stderr}")
                 return None
             
-            # Parse ConfigMap JSON
-            configmap_data = json.loads(result.stdout)
-            
-            # Extract Pod definition from ConfigMap data
-            if 'data' not in configmap_data:
+            # Parse ConfigMap YAML
+            configmap_data = yaml.safe_load(result.stdout)
+            if not configmap_data or 'data' not in configmap_data:
                 logger.error(f"ConfigMap {configmap_name} has no data section")
                 return None
             
-            # Look for pod.yaml in ConfigMap data
-            pod_yaml_content = configmap_data['data'].get('pod.yaml')
-            if not pod_yaml_content:
+            # Get Pod definition from ConfigMap data
+            pod_yaml = configmap_data['data'].get('pod.yaml')
+            if not pod_yaml:
                 logger.error(f"ConfigMap {configmap_name} does not contain 'pod.yaml' key")
                 return None
             
-            # Parse Pod definition YAML
-            pod_definition = yaml.safe_load(pod_yaml_content)
-            
+            # Parse Pod definition
+            pod_definition = yaml.safe_load(pod_yaml)
             if not pod_definition:
                 logger.error(f"Invalid Pod definition in ConfigMap {configmap_name}")
                 return None
             
-            logger.info(f"Successfully retrieved Pod definition from ConfigMap {configmap_name}")
+            logger.debug(f"Successfully retrieved Pod definition from ConfigMap {configmap_name}")
             return pod_definition
             
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse ConfigMap JSON: {e}")
-            return None
-        except yaml.YAMLError as e:
-            logger.error(f"Failed to parse Pod definition YAML: {e}")
-            return None
         except Exception as e:
             logger.error(f"Error retrieving Pod definition from ConfigMap {configmap_name}: {e}")
             return None
@@ -127,7 +117,7 @@ class PodCreator:
             
             # Use ccictl to create Pod
             cmd = f"ccictl apply -f {temp_file}"
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             # Clean up temporary file
             try:

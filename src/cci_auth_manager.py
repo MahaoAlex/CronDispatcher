@@ -123,7 +123,7 @@ class CCIAuthManager:
     def _execute_command(self, cmd: list, operation: str) -> bool:
         """Execute a single ccictl command"""
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
             logger.debug(f"CCI {operation}: {result.stdout.strip()}")
             return True
         except subprocess.CalledProcessError as e:
@@ -140,7 +140,8 @@ class CCIAuthManager:
         try:
             result = subprocess.run(
                 ['ccictl', 'get', 'namespaces'],
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 check=True,
                 timeout=30

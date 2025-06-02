@@ -8,6 +8,7 @@ import time
 import logging
 import yaml
 import subprocess
+import json
 from typing import Dict, List
 
 # Configure logging
@@ -29,7 +30,7 @@ class PodCleaner:
         try:
             # Get Pods managed by cron-dispatcher using ccictl
             cmd = f"ccictl get pods -n {self.namespace} -l app.kubernetes.io/managed-by=cron-dispatcher -o yaml"
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             if result.returncode != 0:
                 logger.warning("Failed to get pods for garbage collection")
@@ -170,7 +171,7 @@ class PodCleaner:
         """Delete Pod using ccictl"""
         try:
             cmd = f"ccictl delete pod {pod_name} -n {pod_namespace}"
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             if result.returncode == 0:
                 logger.info(f"Deleted Pod {pod_name}: {reason}")
@@ -180,4 +181,38 @@ class PodCleaner:
                 return False
         except Exception as e:
             logger.error(f"Failed to delete Pod {pod_name}: {e}")
-            return False 
+            return False
+
+    def get_pods_by_labels(self, label_selector: Dict) -> List[Dict]:
+        """Get Pods by label selector"""
+        try:
+            # Build label selector string
+            match_labels = label_selector.get('matchLabels', {})
+            label_parts = [f"{key}={value}" for key, value in match_labels.items()]
+            label_string = ','.join(label_parts)
+            
+            if not label_string:
+                logger.warning("No label selector provided, skipping Pod query")
+                return []
+            
+            # Use ccictl to get Pods
+            cmd = f"ccictl get pods -n {self.namespace} -l {label_string} -o json"
+            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"Failed to get Pods: {result.stderr}")
+                return []
+            
+            # Parse JSON response
+            pods_data = json.loads(result.stdout)
+            pods = pods_data.get('items', [])
+            
+            logger.info(f"Found {len(pods)} Pods matching label selector in namespace {self.namespace}")
+            return pods
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse Pods JSON response: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Error getting Pods by labels: {e}")
+            return [] 
