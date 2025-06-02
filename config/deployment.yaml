@@ -4,6 +4,7 @@ metadata:
   name: cron-dispatcher
   namespace: cv-cd-generators  # Update this namespace according to your deployment requirements
   labels:
+    
     app.kubernetes.io/managed-by: cron-dispatcher
     app.kubernetes.io/name: cron-dispatcher
     cron-dispatcher.io/component: dispatcher
@@ -11,6 +12,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
+      app: cron-dispatcher
       app.kubernetes.io/managed-by: cron-dispatcher
       app.kubernetes.io/name: cron-dispatcher
       cron-dispatcher.io/component: dispatcher
@@ -18,6 +20,7 @@ spec:
     metadata:
       creationTimestamp: null
       labels:
+        app: cron-dispatcher
         app.kubernetes.io/managed-by: cron-dispatcher
         app.kubernetes.io/name: cron-dispatcher
         cron-dispatcher.io/component: dispatcher
@@ -28,7 +31,7 @@ spec:
     spec:
       containers:
       - name: default
-        image: swr.af-south-1.myhuaweicloud.com/content-discovery/cron-dispatcher:20250602161533.d5b58302  # Update with your actual image registry address
+        image: swr.af-south-1.myhuaweicloud.com/content-discovery/cron-dispatcher:20250602212104.8ca736e6  # Update with your actual image registry address
         resources:
           limits:
             cpu: '0'
