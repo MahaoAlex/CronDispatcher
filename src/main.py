@@ -27,8 +27,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger('cron-dispatcher')
 
-class cron-dispatcher:
-    """cron-dispatcher main class"""
+class CronDispatcher:
+    """CronDispatcher main class"""
     
     def __init__(self):
         self.namespace = os.getenv('NAMESPACE', 'default')
@@ -385,7 +385,7 @@ class cron-dispatcher:
 
 def main():
     """Main function"""
-    dispatcher = cron-dispatcher()
+    dispatcher = CronDispatcher()
     dispatcher.run()
 
 if __name__ == '__main__':
