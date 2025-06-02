@@ -1,0 +1,33 @@
+apiVersion: cci/v2
+kind: ConfigMap
+metadata:
+  name: nginx-test-template
+  namespace: cv-cd-generators
+  labels:
+    app.kubernetes.io/name: cron-dispatcher
+    app.kubernetes.io/managed-by: cron-dispatcher
+    cron-dispatcher.io/component: task-config
+data:
+  pod.yaml: |
+    kind: Pod
+    apiVersion: cci/v2
+    metadata:
+      name: nginx-test
+      namespace: cv-cd-generators
+      labels:
+        app.kubernetes.io/name: nginx-test
+        app.kubernetes.io/managed-by: cron-dispatcher
+        cron-dispatcher.io/task-name: "nginx-test"
+      containers:
+        - name: default
+          image: nginx:latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: imagepull-secret
