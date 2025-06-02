@@ -6,11 +6,11 @@ metadata:
   labels:
     app.kubernetes.io/name: cron-dispatcher
     app.kubernetes.io/managed-by: cron-dispatcher
-    cron-dispatcher.io/component: task-config
+    cron-dispatcher.io/component: pod-template
 data:
   pod.yaml: |
-    kind: Pod
     apiVersion: cci/v2
+    kind: Pod
     metadata:
       name: nginx-test
       namespace: cv-cd-generators
@@ -18,6 +18,7 @@ data:
         app.kubernetes.io/name: nginx-test
         app.kubernetes.io/managed-by: cron-dispatcher
         cron-dispatcher.io/task-name: "nginx-test"
+    spec:
       containers:
         - name: default
           image: nginx:latest
