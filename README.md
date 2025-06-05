@@ -331,6 +331,22 @@ ccictl exec deployment/cron-dispatcher -- /usr/local/bin/health_check.sh --verbo
 ccictl exec deployment/cron-dispatcher -- crontab -l
 ```
 
+## Dependency of ccictl
+
+When creating pods within `CronDispatch` running on `CCI2.0` using `ccictl`, there are two available methods:
+
+- Through Internet
+
+- Through VPC network
+  Note: Since the 100.64 network route is no longer permitted, accessing the CCI management API and IAM management API via this method requires using VPCEP (VPC Endpoint).
+
+* Create a VPC Endpoint to connect to the Endpoint Service of APIGateway Manage Plane.
+
+* Add CNAME DNS records for CCI and IAM to the internal domain of the above endpoint.
+  (e.g. APIGateway VPC Endpint Inner Domain: vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com)
+  CNAME: iam.af-south-1.myhuaweicloud.com -> vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com
+  CNAME: cci.af-south-1.myhuaweicloud.com -> vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com
+
 ## Performance Considerations
 
 - **Resource Limits**: Configure appropriate CPU and memory limits
