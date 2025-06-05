@@ -340,12 +340,17 @@ When creating pods within `CronDispatch` running on `CCI2.0` using `ccictl`, the
 - Through VPC network
   Note: Since the 100.64 network route is no longer permitted, accessing the CCI management API and IAM management API via this method requires using VPCEP (VPC Endpoint).
 
-* Create a VPC Endpoint to connect to the Endpoint Service of APIGateway Manage Plane.
+  Implementation Steps:
 
-* Add CNAME DNS records for CCI and IAM to the internal domain of the above endpoint.
-  (e.g. APIGateway VPC Endpint Inner Domain: vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com)
-  CNAME: iam.af-south-1.myhuaweicloud.com -> vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com
-  CNAME: cci.af-south-1.myhuaweicloud.com -> vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com
+  * Create a VPC Endpoint to connect to the Endpoint Service of APIGateway Manage Plane.
+
+  * Add CNAME DNS records for CCI and IAM to the internal domain of the above endpoint.
+    (e.g. APIGateway VPC Endpint Inner Domain: vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com)
+    CNAME: iam.af-south-1.myhuaweicloud.com -> vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com
+    CNAME: cci.af-south-1.myhuaweicloud.com -> vpcep-99bb88e4-5459-42c2-8b37-2c4a3dcf2087.af-south-1.huaweicloud.com
+
+  ** Important Note: **
+  When creating Private Zone `af-south-1.myhuaweicloud.com` in DNS Service, please make sure to enable the feature `Recursive resolution proxy for subdomains `.
 
 ## Performance Considerations
 
