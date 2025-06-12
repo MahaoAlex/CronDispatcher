@@ -36,7 +36,7 @@ class PodCreator:
     def get_pod_definition_from_configmap(self, configmap_name: str) -> dict:
         """Retrieve Pod definition from ConfigMap using ccictl"""
         try:
-            cmd = f"ccictl get configmap {configmap_name} -n {self.namespace} -o yaml"
+            cmd = f"/usr/local/bin/ccictl get configmap {configmap_name} -n {self.namespace} -o yaml"
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode != 0:
@@ -116,7 +116,7 @@ class PodCreator:
                 yaml.dump(pod_template, f, default_flow_style=False)
             
             # Use ccictl to create Pod
-            cmd = f"ccictl apply -f {temp_file}"
+            cmd = f"/usr/local/bin/ccictl apply -f {temp_file}"
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             # Clean up temporary file

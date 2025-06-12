@@ -21,7 +21,11 @@ start_crond() {
     touch /var/spool/cron/root
     chmod 600 /var/spool/cron/root
     
-    # Start crond in background
+    # Add PATH to crontab
+    echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" > /etc/cron.d/cron-env
+    echo "SHELL=/bin/bash" >> /etc/cron.d/cron-env
+    
+    # Start crond in background with basic options
     /usr/sbin/crond -n -s -m off &
     local crond_pid=$!
     
@@ -32,6 +36,11 @@ start_crond() {
     if kill -0 $crond_pid 2>/dev/null; then
         echo $crond_pid > $CROND_PID_FILE
         echo "[PASS] crond started successfully (PID: $crond_pid)"
+        # Display crond process details
+        ps -f -p $crond_pid
+        # Display cron jobs
+        echo "Current cron jobs:"
+        crontab -l
         return 0
     else
         echo "[FAIL] crond failed to start"
