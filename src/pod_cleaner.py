@@ -5,22 +5,15 @@ Pod Cleaner - Responsible for garbage collection and cleanup of cron-dispatcher 
 
 import os
 import time
-import logging
+import sys
 import yaml
 import subprocess
 import json
 from typing import Dict, List
+from logger_config import setup_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,  # Set to DEBUG level
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('/var/log/cron-dispatcher/pod-cleaner.log')
-    ]
-)
-logger = logging.getLogger('PodCleaner')
+# Set up logger
+logger = setup_logger('PodCleaner', '/var/log/cron-dispatcher/pod-cleaner.log')
 
 class PodCleaner:
     """Pod Cleaner class for garbage collection"""
@@ -30,7 +23,7 @@ class PodCleaner:
         self.gc_dry_run = gc_dry_run
         self.gc_batch_size = gc_batch_size
         
-        logger.info(f"PodCleaner initialized - Namespace: {self.namespace}")
+        logger.info(f"PodCleaner initialized for namespace: {self.namespace}, dry_run: {self.gc_dry_run}, batch_size: {self.gc_batch_size}")
         logger.info(f"Garbage Collection - Dry Run: {self.gc_dry_run}, Batch Size: {self.gc_batch_size}")
     
     def cleanup_pods(self, gc_policy: Dict) -> int:

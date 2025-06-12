@@ -7,25 +7,16 @@ Declarative configuration mode driven by ConfigMap, implementing containerized o
 import os
 import sys
 import time
-import logging
 import yaml
 import subprocess
 from typing import Dict, List, Optional
-
 from crontab import CronTab
 from pod_cleaner import PodCleaner
 from cci_auth_manager import CCIAuthManager
+from logger_config import setup_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('/var/log/cron-dispatcher/dispatcher.log')
-    ]
-)
-logger = logging.getLogger('cron-dispatcher')
+# Set up logger
+logger = setup_logger('CronDispatcher', '/var/log/cron-dispatcher/dispatcher.log')
 
 class CronDispatcher:
     """CronDispatcher main class"""

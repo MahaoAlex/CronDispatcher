@@ -6,10 +6,11 @@ Manages CCI credentials and configures ccictl authentication
 
 import os
 import subprocess
-import logging
 from typing import Dict, Optional
+from logger_config import setup_logger
 
-logger = logging.getLogger(__name__)
+# Set up logger
+logger = setup_logger('CCIAuthManager', '/var/log/cron-dispatcher/cci-auth.log')
 
 class CCIAuthManager:
     """Manages CCI authentication using environment variables and configures ccictl"""

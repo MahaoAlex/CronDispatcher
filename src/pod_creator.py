@@ -5,23 +5,15 @@ Pod Creator - Called by cron jobs, responsible for creating specific Pod instanc
 
 import os
 import sys
-import logging
 import yaml
 import uuid
 import subprocess
 import json
 from datetime import datetime
+from logger_config import setup_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('/var/log/cron-dispatcher/pod-creator.log')
-    ]
-)
-logger = logging.getLogger('PodCreator')
+# Set up logger
+logger = setup_logger('PodCreator', '/var/log/cron-dispatcher/pod-creator.log')
 
 class PodCreator:
     """Pod Creator class"""
@@ -36,7 +28,7 @@ class PodCreator:
     def get_pod_definition_from_configmap(self, configmap_name: str) -> dict:
         """Retrieve Pod definition from ConfigMap using ccictl"""
         try:
-            logger.Info(f"Trying to retrieve Pod definition from ConfigMap {configmap_name} and namespace {self.namespace}")
+            logger.info(f"Trying to retrieve Pod definition from ConfigMap {configmap_name} and namespace {self.namespace}")
 
             cmd = f"/usr/local/bin/ccictl get configmap {configmap_name} -n {self.namespace} -o yaml"
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
@@ -55,7 +47,7 @@ class PodCreator:
             pod_yaml = configmap_data['data'].get('pod.yaml')
             if not pod_yaml:
                 logger.error(f"ConfigMap {configmap_name} does not contain 'pod.yaml' key")
-                return None
+                return None 
             
             # Parse Pod definition
             pod_definition = yaml.safe_load(pod_yaml)
@@ -63,7 +55,7 @@ class PodCreator:
                 logger.error(f"Invalid Pod definition in ConfigMap {configmap_name}")
                 return None
             
-            logger.Info(f"Successfully retrieved Pod definition from ConfigMap {configmap_name} and namespace {self.namespace}")
+            logger.info(f"Successfully retrieved Pod definition from ConfigMap {configmap_name} and namespace {self.namespace}")
             return pod_definition
             
         except Exception as e:
