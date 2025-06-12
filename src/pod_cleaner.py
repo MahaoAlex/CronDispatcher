@@ -12,6 +12,14 @@ import json
 from typing import Dict, List
 
 # Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,  # Set to DEBUG level
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('/var/log/cron-dispatcher/pod-cleaner.log')
+    ]
+)
 logger = logging.getLogger('PodCleaner')
 
 class PodCleaner:
@@ -28,12 +36,15 @@ class PodCleaner:
     def cleanup_pods(self, gc_policy: Dict) -> int:
         """Clean up expired Pods with garbage collection using ccictl"""
         try:
+            logger.info(f"Starting cleanup with policy: {gc_policy}")
+            
             # Get Pods managed by cron-dispatcher using ccictl
-            cmd = f"ccictl get pods -n {self.namespace} -l app.kubernetes.io/managed-by=cron-dispatcher -o yaml"
+            cmd = f"/usr/local/bin/ccictl get pods -n {self.namespace} -l app.kubernetes.io/managed-by=cron-dispatcher -o yaml"
+            logger.debug(f"Executing command: {cmd}")
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode != 0:
-                logger.warning("Failed to get pods for garbage collection")
+                logger.warning(f"Failed to get pods for garbage collection: {result.stderr}")
                 return 0
             
             # Parse pod list
@@ -44,16 +55,20 @@ class PodCleaner:
                     return 0
                 
                 pods = pod_list['items']
+                logger.debug(f"Found {len(pods)} pods to process")
             except Exception as e:
                 logger.error(f"Failed to parse pod list: {e}")
                 return 0
             
             # Group by task name
             task_pods = self._group_pods_by_task(pods)
+            logger.info(f"Grouped pods by task: {json.dumps({k: len(v['success']) + len(v['failed']) for k, v in task_pods.items()}, indent=2)}")
             
             # Clean up Pods for each task
             total_deleted = 0
             for task_name, pods_by_status in task_pods.items():
+                logger.debug(f"Processing task: {task_name}")
+                logger.debug(f"Success pods: {len(pods_by_status['success'])}, Failed pods: {len(pods_by_status['failed'])}")
                 deleted_count = self._cleanup_task_pods(task_name, pods_by_status, gc_policy)
                 total_deleted += deleted_count
                 
@@ -61,7 +76,7 @@ class PodCleaner:
             return total_deleted
                 
         except Exception as e:
-            logger.error(f"Error occurred during garbage collection: {e}")
+            logger.error(f"Error occurred during garbage collection: {e}", exc_info=True)
             return 0
     
     def _group_pods_by_task(self, pods: List[Dict]) -> Dict[str, Dict[str, List]]:
@@ -77,6 +92,9 @@ class PodCleaner:
                     task_pods[task_name] = {'success': [], 'failed': []}
                 
                 phase = pod.get('status', {}).get('phase', '')
+                pod_name = pod.get('metadata', {}).get('name', '')
+                logger.debug(f"Pod {pod_name} (task: {task_name}) has phase: {phase}")
+                
                 if phase == 'Succeeded':
                     task_pods[task_name]['success'].append(pod)
                 elif phase == 'Failed':
@@ -90,6 +108,7 @@ class PodCleaner:
         
         # Get retention policy for this task
         task_policy = self._get_task_retention_policy(task_name, gc_policy)
+        logger.debug(f"Retention policy for task {task_name}: {task_policy}")
         
         max_success = task_policy.get('success', 3)
         max_failed = task_policy.get('failure', 3)
@@ -103,6 +122,7 @@ class PodCleaner:
         
         if len(success_pods) > max_success:
             pods_to_delete = success_pods[max_success:]
+            logger.info(f"Task {task_name}: {len(pods_to_delete)} successful pods exceed retention limit of {max_success}")
             deleted_count += self._delete_pods_batch(
                 pods_to_delete, 
                 f"Exceeds successful Pod retention limit ({max_success}) for task {task_name}"
@@ -117,6 +137,7 @@ class PodCleaner:
         
         if len(failed_pods) > max_failed:
             pods_to_delete = failed_pods[max_failed:]
+            logger.info(f"Task {task_name}: {len(pods_to_delete)} failed pods exceed retention limit of {max_failed}")
             deleted_count += self._delete_pods_batch(
                 pods_to_delete,
                 f"Exceeds failed Pod retention limit ({max_failed}) for task {task_name}"
@@ -126,21 +147,28 @@ class PodCleaner:
     
     def _get_task_retention_policy(self, task_name: str, gc_policy: Dict) -> Dict:
         """Get retention policy for specific task"""
+        logger.debug(f"Getting retention policy for task {task_name}")
+        logger.debug(f"Available policies: {json.dumps(gc_policy, indent=2)}")
+        
         # Check task-specific policies first
         for task_config in gc_policy.get('tasks', []):
             task_selector = task_config.get('taskSelector', {})
             if task_selector.get('cron-dispatcher.io/task-name') == task_name:
-                return {
+                policy = {
                     'success': task_config.get('success', 3),
                     'failure': task_config.get('failure', 3)
                 }
+                logger.debug(f"Found task-specific policy: {policy}")
+                return policy
         
         # Fall back to global policy
         global_policy = gc_policy.get('global', {})
-        return {
+        policy = {
             'success': global_policy.get('success', 3),
             'failure': global_policy.get('failure', 3)
         }
+        logger.debug(f"Using global policy: {policy}")
+        return policy
     
     def _delete_pods_batch(self, pods_to_delete: List, reason: str) -> int:
         """Delete Pods in batches using ccictl"""
@@ -149,6 +177,7 @@ class PodCleaner:
         # Process in batches
         for i in range(0, len(pods_to_delete), self.gc_batch_size):
             batch = pods_to_delete[i:i + self.gc_batch_size]
+            logger.debug(f"Processing batch {i//self.gc_batch_size + 1} of {(len(pods_to_delete) + self.gc_batch_size - 1)//self.gc_batch_size}")
             
             for pod in batch:
                 pod_name = pod.get('metadata', {}).get('name', '')
@@ -163,6 +192,7 @@ class PodCleaner:
             
             # Small delay between batches to avoid API server pressure
             if i + self.gc_batch_size < len(pods_to_delete):
+                logger.debug(f"Waiting 60 seconds before processing next batch")
                 time.sleep(60)
         
         return deleted_count
@@ -170,17 +200,18 @@ class PodCleaner:
     def _delete_pod(self, pod_name: str, pod_namespace: str, reason: str) -> bool:
         """Delete Pod using ccictl"""
         try:
-            cmd = f"ccictl delete pod {pod_name} -n {pod_namespace}"
+            cmd = f"/usr/local/bin/ccictl delete pod {pod_name} -n {pod_namespace}"
+            logger.debug(f"Executing command: {cmd}")
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode == 0:
                 logger.info(f"Deleted Pod {pod_name}: {reason}")
                 return True
             else:
-                logger.error(f"Failed to delete Pod {pod_name}")
+                logger.error(f"Failed to delete Pod {pod_name}: {result.stderr}")
                 return False
         except Exception as e:
-            logger.error(f"Failed to delete Pod {pod_name}: {e}")
+            logger.error(f"Failed to delete Pod {pod_name}: {e}", exc_info=True)
             return False
 
     def get_pods_by_labels(self, label_selector: Dict) -> List[Dict]:
@@ -196,7 +227,8 @@ class PodCleaner:
                 return []
             
             # Use ccictl to get Pods
-            cmd = f"ccictl get pods -n {self.namespace} -l {label_string} -o json"
+            cmd = f"/usr/local/bin/ccictl get pods -n {self.namespace} -l {label_string} -o json"
+            logger.debug(f"Executing command: {cmd}")
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
             if result.returncode != 0:
@@ -208,11 +240,12 @@ class PodCleaner:
             pods = pods_data.get('items', [])
             
             logger.info(f"Found {len(pods)} Pods matching label selector in namespace {self.namespace}")
+            logger.debug(f"Label selector: {label_string}")
             return pods
             
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Pods JSON response: {e}")
+            logger.error(f"Failed to parse Pods JSON response: {e}", exc_info=True)
             return []
         except Exception as e:
-            logger.error(f"Error getting Pods by labels: {e}")
+            logger.error(f"Error getting Pods by labels: {e}", exc_info=True)
             return [] 
