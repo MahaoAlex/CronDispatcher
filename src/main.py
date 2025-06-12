@@ -230,7 +230,8 @@ class CronDispatcher:
         
         # Convert cron expression and create job
         standard_cron = self._convert_quartz_to_cron(schedule)
-        command = f"python3 /app/src/pod_creator.py {name} {configmap_name}"
+        # Use wrapper script to ensure environment variables are available
+        command = f"/usr/local/bin/run_cron_job.sh python3 /app/src/pod_creator.py {name} {configmap_name}"
         job = self.cron.new(command=command, comment='cron-dispatcher')
         job.setall(standard_cron)
         

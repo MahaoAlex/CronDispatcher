@@ -12,6 +12,13 @@ MAIN_APP_PID_FILE="/var/run/cron-dispatcher.pid"
 CROND_LOG="/var/log/cron.log"
 MAIN_APP_LOG="/var/log/cron-dispatcher/dispatcher.log"
 
+# Create necessary directories
+RUN mkdir -p /var/log/cron-dispatcher && \
+    mkdir -p /etc/cron-dispatcher-config && \
+    mkdir -p /etc/cron-dispatcher-gc-policy && \
+    mkdir -p /var/run && \
+    mkdir -p /var/spool/cron
+
 # Function to start crond
 start_crond() {
     echo "Starting crond service..."
@@ -21,9 +28,30 @@ start_crond() {
     touch /var/spool/cron/root
     chmod 600 /var/spool/cron/root
     
-    # Add PATH to crontab
-    echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" > /etc/cron.d/cron-env
-    echo "SHELL=/bin/bash" >> /etc/cron.d/cron-env
+    # Export environment variables to cron environment
+    {
+        echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        echo "SHELL=/bin/bash"
+        # Export all relevant environment variables
+        env | grep -E '^(NAMESPACE|KUBERNETES|CCI)' | while read -r line; do
+            echo "$line"
+        done
+    } > /etc/cron.d/cron-env
+    
+    # Create a wrapper script to source environment and run the command
+    cat > /usr/local/bin/run_cron_job.sh << 'EOF'
+#!/bin/bash
+# Source environment variables
+if [ -f /etc/cron.d/cron-env ]; then
+    set -a
+    source /etc/cron.d/cron-env
+    set +a
+fi
+# Execute the command with all arguments
+exec "$@"
+EOF
+    
+    chmod +x /usr/local/bin/run_cron_job.sh
     
     # Start crond in background with basic options
     /usr/sbin/crond -n -s -m off &

@@ -36,6 +36,8 @@ class PodCreator:
     def get_pod_definition_from_configmap(self, configmap_name: str) -> dict:
         """Retrieve Pod definition from ConfigMap using ccictl"""
         try:
+            logger.Info(f"Trying to retrieve Pod definition from ConfigMap {configmap_name} and namespace {self.namespace}")
+
             cmd = f"/usr/local/bin/ccictl get configmap {configmap_name} -n {self.namespace} -o yaml"
             result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             
@@ -61,7 +63,7 @@ class PodCreator:
                 logger.error(f"Invalid Pod definition in ConfigMap {configmap_name}")
                 return None
             
-            logger.debug(f"Successfully retrieved Pod definition from ConfigMap {configmap_name}")
+            logger.Info(f"Successfully retrieved Pod definition from ConfigMap {configmap_name} and namespace {self.namespace}")
             return pod_definition
             
         except Exception as e:
