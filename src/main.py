@@ -70,7 +70,7 @@ class CronDispatcher:
             logger.error(f"Failed to initialize CCI Authentication Manager: {e}")
             return None
     
-    def load_config_from_file(self) -> Optional[List[Dict]]:
+    def load_tasks_config_from_file(self) -> Optional[List[Dict]]:
         """Load task configuration from mounted file"""
         try:
             if not os.path.exists(self.tasks_config_file):
@@ -91,7 +91,7 @@ class CronDispatcher:
             logger.error(f"Failed to load task configuration: {e}")
             return None
     
-    def load_gc_policy(self) -> Dict:
+    def load_gc_policy_from_file(self) -> Dict:
         """Load garbage collection policy from mounted file"""
         default_policy = {
             'global': {
@@ -123,7 +123,46 @@ class CronDispatcher:
             logger.warning(f"Failed to load garbage collection policy, using default: {e}")
         
         return default_policy
+
+    def _load_and_apply_config(self):
+        """Load and apply configuration"""
+        # Load task configuration
+        tasks = self.load_tasks_config_from_file()
+        if tasks:
+            self.update_crontab(tasks)
+        
+        # Load GC policy
+        gc_policy = self.load_gc_policy_from_file()
+        self.update_cleanup_interval(gc_policy)
     
+    def watch_tasks_config_change(self) -> bool:
+        """Check if the task configuration file has changed"""
+        try:
+            if os.path.exists(self.tasks_config_file):
+                tasks_mtime = os.path.getmtime(self.tasks_config_file)
+                if not hasattr(self, 'last_tasks_mtime') or tasks_mtime > self.last_tasks_mtime:
+                    self.last_tasks_mtime = tasks_mtime
+                    logger.info("Task configuration file changed, reloading...")
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Error checking task configuration file change: {e}")
+            return False
+
+    def watch_gc_policy_change(self) -> bool:
+        """Check if the GC policy file has changed"""
+        try:
+            if os.path.exists(self.gc_policy_file):
+                gc_mtime = os.path.getmtime(self.gc_policy_file)
+                if not hasattr(self, 'last_gc_mtime') or gc_mtime > self.last_gc_mtime:
+                    self.last_gc_mtime = gc_mtime
+                    logger.info("Garbage collection policy file changed, reloading...")
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Error checking GC policy file change: {e}")
+            return False
+
     def validate_cron_expression(self, cron_expr: str) -> bool:
         """Validate cron expression"""
         try:
@@ -251,31 +290,6 @@ class CronDispatcher:
             logger.error(f"Error during CCI authentication initialization: {e}")
             return False
     
-    def watch_config_changes(self) -> bool:
-        """Check if configuration files have changed"""
-        try:
-            # Check task configuration file
-            if os.path.exists(self.tasks_config_file):
-                tasks_mtime = os.path.getmtime(self.tasks_config_file)
-                if not hasattr(self, 'last_tasks_mtime') or tasks_mtime > self.last_tasks_mtime:
-                    self.last_tasks_mtime = tasks_mtime
-                    logger.info("Task configuration file changed, reloading...")
-                    return True
-            
-            # Check GC policy file
-            if os.path.exists(self.gc_policy_file):
-                gc_mtime = os.path.getmtime(self.gc_policy_file)
-                if not hasattr(self, 'last_gc_mtime') or gc_mtime > self.last_gc_mtime:
-                    self.last_gc_mtime = gc_mtime
-                    logger.info("Garbage collection policy file changed, reloading...")
-                    return True
-            
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error checking configuration file changes: {e}")
-            return False
-    
     def _parse_interval_to_seconds(self, interval_str: str) -> int:
         """Parse time interval string to seconds"""
         try:
@@ -307,22 +321,23 @@ class CronDispatcher:
         try:
             interval_str = gc_policy.get('cleanupInterval', '5m')
             new_interval = self._parse_interval_to_seconds(interval_str)
-            
             # Apply safety limits
             new_interval = max(30, min(86400, new_interval))  # 30 seconds to 24 hours
-            
             if new_interval != self.cleanup_interval_seconds:
                 self.cleanup_interval_seconds = new_interval
                 logger.info(f"Updated cleanup interval to {new_interval} seconds ({interval_str})")
-                
+                self.last_cleanup_time = 0
         except Exception as e:
             logger.warning(f"Failed to update cleanup interval: {e}")
     
-    def should_run_cleanup(self) -> bool:
-        """Check if cleanup should run based on interval"""
+    def _run_cleanup(self):
+        """Run garbage collection cleanup if interval has elapsed"""
         current_time = time.time()
-        return (current_time - self.last_cleanup_time) >= self.cleanup_interval_seconds
-    
+        if (current_time - self.last_cleanup_time) >= self.cleanup_interval_seconds:
+            gc_policy = self.load_gc_policy_from_file()
+            self.pod_cleaner.cleanup_pods(gc_policy)
+            self.last_cleanup_time = current_time
+
     def run(self):
         """Main run loop"""
         logger.info("cron-dispatcher starting...")
@@ -340,12 +355,19 @@ class CronDispatcher:
         while True:
             try:
                 # Check for configuration changes every 30 seconds
-                if self.watch_config_changes():
-                    self._load_and_apply_config()
+                if self.watch_tasks_config_change():
+                    # Load task configuration
+                    tasks = self.load_tasks_config_from_file()
+                    if tasks:
+                        self.update_crontab(tasks)
+
+                if self.watch_gc_policy_change():
+                    # Load GC policy
+                    gc_policy = self.load_gc_policy_from_file()
+                    self.update_cleanup_interval(gc_policy)
                 
-                # Run cleanup based on interval
-                if self.should_run_cleanup():
-                    self._run_cleanup()
+                # Run cleanup if interval has elapsed
+                self._run_cleanup()
                 
                 time.sleep(30)  # Check every 30 seconds
                 
@@ -357,23 +379,6 @@ class CronDispatcher:
                 time.sleep(30)
         
         logger.info("cron-dispatcher stopped")
-    
-    def _load_and_apply_config(self):
-        """Load and apply configuration"""
-        # Load task configuration
-        tasks = self.load_config_from_file()
-        if tasks:
-            self.update_crontab(tasks)
-        
-        # Load GC policy
-        gc_policy = self.load_gc_policy()
-        self.update_cleanup_interval(gc_policy)
-    
-    def _run_cleanup(self):
-        """Run garbage collection cleanup"""
-        gc_policy = self.load_gc_policy()
-        self.pod_cleaner.cleanup_pods(gc_policy)
-        self.last_cleanup_time = time.time()
 
 def main():
     """Main function"""
