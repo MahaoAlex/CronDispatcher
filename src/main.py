@@ -5,7 +5,6 @@ Declarative configuration mode driven by ConfigMap, implementing containerized o
 """
 
 import os
-import sys
 import time
 import yaml
 import subprocess

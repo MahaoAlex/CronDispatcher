@@ -6,7 +6,7 @@ Manages CCI credentials and configures ccictl authentication
 
 import os
 import subprocess
-from typing import Dict, Optional
+from typing import Dict
 from logger_config import setup_logger
 
 # Set up logger
@@ -39,7 +39,7 @@ class CCIAuthManager:
             value = os.getenv(env_var)
             if value:
                 self.credentials[cred_key] = value
-            elif env_var != 'CCI_PROJECT_NAME':  # project_name is optional
+            elif env_var != 'CCI_PROJECT_NAME': 
                 missing_vars.append(env_var)
         
         if missing_vars:

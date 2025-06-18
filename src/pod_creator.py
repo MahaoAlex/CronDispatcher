@@ -8,7 +8,6 @@ import sys
 import yaml
 import uuid
 import subprocess
-import json
 from datetime import datetime
 from logger_config import setup_logger
 

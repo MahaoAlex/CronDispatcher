@@ -2,10 +2,7 @@
 """
 Pod Cleaner - Responsible for garbage collection and cleanup of cron-dispatcher managed Pods
 """
-
-import os
 import time
-import sys
 import yaml
 import subprocess
 import json
