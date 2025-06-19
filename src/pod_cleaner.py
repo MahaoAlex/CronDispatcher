@@ -106,6 +106,8 @@ class PodCleaner:
         max_success = task_policy.get('success', 3)
         max_failed = task_policy.get('failure', 3)
         
+        dry_run_prefix = "[DRY RUN] " if self.gc_dry_run else ""
+        
         # Clean up successful Pods
         success_pods = sorted(
             pods_by_status['success'],
@@ -115,7 +117,7 @@ class PodCleaner:
         
         if len(success_pods) > max_success:
             pods_to_delete = success_pods[max_success:]
-            logger.info(f"Task {task_name}: {len(pods_to_delete)} successful pods exceed retention limit of {max_success}")
+            logger.info(f"{dry_run_prefix}Task {task_name}: {len(pods_to_delete)} successful pods exceed retention limit of {max_success}")
             deleted_count += self._delete_pods_batch(
                 pods_to_delete, 
                 f"Exceeds successful Pod retention limit ({max_success}) for task {task_name}"
@@ -130,7 +132,7 @@ class PodCleaner:
         
         if len(failed_pods) > max_failed:
             pods_to_delete = failed_pods[max_failed:]
-            logger.info(f"Task {task_name}: {len(pods_to_delete)} failed pods exceed retention limit of {max_failed}")
+            logger.info(f"{dry_run_prefix}Task {task_name}: {len(pods_to_delete)} failed pods exceed retention limit of {max_failed}")
             deleted_count += self._delete_pods_batch(
                 pods_to_delete,
                 f"Exceeds failed Pod retention limit ({max_failed}) for task {task_name}"

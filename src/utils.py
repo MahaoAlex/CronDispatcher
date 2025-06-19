@@ -62,41 +62,29 @@ def execute_command_with_retry(
     logger.error(f"Command failed after {max_retries + 1} attempts: {cmd}")
     return False, "", f"Command failed after {max_retries + 1} attempts"
 
-def safe_yaml_load(yaml_content: str, source_name: str = "unknown") -> Optional[Dict]:
-    """
-    Safely load YAML content with error handling
-    
-    Args:
-        yaml_content: YAML content as string
-        source_name: Source name for logging
-        
-    Returns:
-        Parsed YAML data or None if failed
-    """
+def safe_yaml_load(yaml_string: str, source: str = "unknown") -> any:
+    """Safely load YAML from a string, with error handling"""
+    if not yaml_string or not yaml_string.strip():
+        logger.warning(f"Empty YAML content from {source}")
+        return None
     try:
-        if not yaml_content or not yaml_content.strip():
-            logger.warning(f"Empty YAML content from {source_name}")
+        data = yaml.safe_load(yaml_string)
+        if data is None:
+            logger.warning(f"YAML content from {source} resulted in no data (e.g., comments-only file).")
             return None
-            
-        data = yaml.safe_load(yaml_content)
-        logger.debug(f"Successfully parsed YAML from {source_name}")
+
+        # PyYAML's safe_load on a simple string returns the string.
+        # For our config files, we expect a dict or a list.
+        if not isinstance(data, (dict, list)):
+            logger.error(f"Error parsing YAML from {source}: content is not a valid dictionary or list.")
+            return None
         return data
-        
-    except Exception as e:
-        logger.error(f"Error parsing YAML from {source_name}: {e}")
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing YAML from {source}: {e}")
         return None
 
-def safe_yaml_dump(data: Any, file_path: str) -> bool:
-    """
-    Safely dump data to YAML file
-    
-    Args:
-        data: Data to dump
-        file_path: Output file path
-        
-    Returns:
-        True if successful, False otherwise
-    """
+def safe_yaml_dump(data: dict, file_path: str) -> bool:
+    """Safely dump data to a YAML file, with error handling"""
     try:
         # Ensure directory exists
         os.makedirs(os.path.dirname(file_path), exist_ok=True)

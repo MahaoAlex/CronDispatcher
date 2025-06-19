@@ -24,6 +24,16 @@ logger = setup_logger('CronDispatcher', '/var/log/cron-dispatcher/dispatcher.log
 class CronDispatcher:
     """CronDispatcher main class"""
     
+    # Time interval constants
+    MIN_INTERVAL_SECONDS = 30
+    MAX_INTERVAL_SECONDS = 24 * 60 * 60  # 24 hours in seconds
+    DEFAULT_INTERVAL_SECONDS = 300  # 5 minutes in seconds
+    
+    # Time unit multipliers
+    SECONDS_PER_MINUTE = 60
+    SECONDS_PER_HOUR = 60 * 60
+    SECONDS_PER_DAY = 24 * 60 * 60
+    
     def __init__(self):
         self.namespace = os.getenv('NAMESPACE', 'default')
         self.timezone = os.getenv('CRON_TIMEZONE', 'UTC')
@@ -173,6 +183,12 @@ class CronDispatcher:
     def validate_cron_expression(self, cron_expr: str) -> bool:
         """Validate cron expression"""
         try:
+            # Check for special strings that are not standard cron expressions
+            special_strings = ['@yearly', '@annually', '@monthly', '@weekly', '@daily', '@midnight', '@hourly']
+            if cron_expr in special_strings:
+                logger.error(f"Special string '{cron_expr}' is not supported in standard cron format")
+                return False
+            
             # Convert Quartz format to standard cron format
             standard_expr = self._convert_quartz_to_cron(cron_expr)
             
@@ -298,41 +314,60 @@ class CronDispatcher:
             return False
     
     def _parse_interval_to_seconds(self, interval_str: str) -> int:
-        """Parse time interval string to seconds"""
+        """Parse human-readable interval string to seconds, with validation."""
+        original_interval_str = str(interval_str).strip()
+        if not original_interval_str:
+            logger.warning(f"Empty interval string, using default {self.DEFAULT_INTERVAL_SECONDS} seconds")
+            return self.DEFAULT_INTERVAL_SECONDS
+
+        unit = original_interval_str[-1]
+        value_str = original_interval_str[:-1]
+
+        multipliers = {
+            's': self.SECONDS_PER_MINUTE / 60,
+            'm': self.SECONDS_PER_MINUTE,
+            'h': self.SECONDS_PER_HOUR,
+            'd': self.SECONDS_PER_DAY,
+        }
+
+        # If no unit, assume seconds
+        if unit.isdigit():
+            value_str = original_interval_str
+            unit = 's'
+        
+        multiplier = multipliers.get(unit)
+
         try:
-            if not interval_str:
-                return 300
-                
-            interval_str = str(interval_str).strip()
+            if multiplier is None:
+                raise ValueError(f"Invalid time unit '{unit}'")
             
-            # If it's just a number, treat as seconds
-            if interval_str.isdigit():
-                return max(1, int(interval_str))
+            value = int(value_str)
+            if value < 0:
+                raise ValueError("Interval value cannot be negative")
+
+            seconds = value * multiplier
             
-            # Parse with unit
-            if interval_str.endswith('s'):
-                return max(1, int(interval_str[:-1]))
-            elif interval_str.endswith('m'):
-                return max(60, int(interval_str[:-1]) * 60)
-            elif interval_str.endswith('h'):
-                return max(3600, int(interval_str[:-1]) * 3600)
-            elif interval_str.endswith('d'):
-                return max(86400, int(interval_str[:-1]) * 86400)
-            else:
-                # Try to parse as number
-                return max(1, int(interval_str))
-                
-        except Exception as e:
-            logger.warning(f"Invalid interval format: {interval_str}, using default 300 seconds: {e}")
-            return 300
+            if seconds < self.MIN_INTERVAL_SECONDS:
+                logger.warning(f"Interval '{original_interval_str}' is below minimum ({self.MIN_INTERVAL_SECONDS}s), clamping to minimum.")
+                return self.MIN_INTERVAL_SECONDS
+            
+            if seconds > self.MAX_INTERVAL_SECONDS:
+                logger.warning(f"Interval '{original_interval_str}' is above maximum ({self.MAX_INTERVAL_SECONDS}s), clamping to maximum.")
+                return self.MAX_INTERVAL_SECONDS
+            
+            return int(seconds)
+
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid interval format '{original_interval_str}', using default {self.DEFAULT_INTERVAL_SECONDS} seconds")
+            return self.DEFAULT_INTERVAL_SECONDS
     
     def update_cleanup_interval(self, gc_policy: Dict):
         """Update cleanup interval from GC policy"""
         try:
             interval_str = gc_policy.get('cleanupInterval', '5m')
             new_interval = self._parse_interval_to_seconds(interval_str)
-            # Apply safety limits
-            new_interval = max(30, min(86400, new_interval))  # 30 seconds to 24 hours
+            # Apply safety limits using class constants
+            new_interval = max(self.MIN_INTERVAL_SECONDS, min(self.MAX_INTERVAL_SECONDS, new_interval))
             if new_interval != self.cleanup_interval_seconds:
                 self.cleanup_interval_seconds = new_interval
                 logger.info(f"Updated cleanup interval to {new_interval} seconds ({interval_str})")
@@ -350,6 +385,9 @@ class CronDispatcher:
 
     def run(self):
         """Main run loop"""
+        # Configuration check interval
+        CONFIG_CHECK_INTERVAL_SECONDS = 30
+        
         logger.info("cron-dispatcher starting...")
         
         # Initialize CCI authentication
@@ -379,14 +417,14 @@ class CronDispatcher:
                 # Run cleanup if interval has elapsed
                 self._run_cleanup()
                 
-                time.sleep(30)  # Check every 30 seconds
+                time.sleep(CONFIG_CHECK_INTERVAL_SECONDS)  # Check every 30 seconds
                 
             except KeyboardInterrupt:
                 logger.info("Received interrupt signal, shutting down...")
                 break
             except Exception as e:
                 logger.error(f"Error in main loop: {e}")
-                time.sleep(30)
+                time.sleep(CONFIG_CHECK_INTERVAL_SECONDS)
         
         logger.info("cron-dispatcher stopped")
 
