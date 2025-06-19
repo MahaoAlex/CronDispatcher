@@ -8,7 +8,7 @@ import os
 import time
 import yaml
 import subprocess
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, Optional, Any, Tuple
 from logger_config import setup_logger
 
 logger = setup_logger('Utils', '/var/log/cron-dispatcher/utils.log')

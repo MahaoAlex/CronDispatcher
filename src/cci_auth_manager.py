@@ -5,8 +5,7 @@ Manages CCI credentials and configures ccictl authentication
 """
 
 import os
-import subprocess
-from typing import Dict, List
+from typing import List
 from logger_config import setup_logger
 from utils import execute_command_with_retry
 

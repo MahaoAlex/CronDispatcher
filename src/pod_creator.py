@@ -6,7 +6,6 @@ Pod Creator - Called by cron jobs, responsible for creating specific Pod instanc
 import os
 import sys
 import uuid
-import subprocess
 from datetime import datetime
 from logger_config import setup_logger
 from utils import (
