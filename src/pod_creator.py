@@ -5,11 +5,17 @@ Pod Creator - Called by cron jobs, responsible for creating specific Pod instanc
 
 import os
 import sys
-import yaml
 import uuid
 import subprocess
 from datetime import datetime
 from logger_config import setup_logger
+from utils import (
+    safe_yaml_load,
+    safe_yaml_dump,
+    execute_command_with_retry,
+    get_ccictl_command,
+    cleanup_temp_file
+)
 
 # Set up logger
 logger = setup_logger('PodCreator', '/var/log/cron-dispatcher/pod-creator.log')
@@ -29,15 +35,15 @@ class PodCreator:
         try:
             logger.info(f"Trying to retrieve Pod definition from ConfigMap {configmap_name} and namespace {self.namespace}")
 
-            cmd = f"/usr/local/bin/ccictl get configmap {configmap_name} -n {self.namespace} -o yaml"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            cmd = get_ccictl_command(f"get configmap {configmap_name} -o yaml", self.namespace)
+            success, stdout, stderr = execute_command_with_retry(cmd, timeout=30, max_retries=3)
             
-            if result.returncode != 0:
-                logger.error(f"Failed to retrieve ConfigMap {configmap_name}: {result.stderr}")
+            if not success:
+                logger.error(f"Failed to retrieve ConfigMap {configmap_name}: {stderr}")
                 return None
             
             # Parse ConfigMap YAML
-            configmap_data = yaml.safe_load(result.stdout)
+            configmap_data = safe_yaml_load(stdout, f"ConfigMap {configmap_name}")
             if not configmap_data or 'data' not in configmap_data:
                 logger.error(f"ConfigMap {configmap_name} has no data section")
                 return None
@@ -49,7 +55,7 @@ class PodCreator:
                 return None 
             
             # Parse Pod definition
-            pod_definition = yaml.safe_load(pod_yaml)
+            pod_definition = safe_yaml_load(pod_yaml, f"Pod definition from ConfigMap {configmap_name}")
             if not pod_definition:
                 logger.error(f"Invalid Pod definition in ConfigMap {configmap_name}")
                 return None
@@ -105,27 +111,27 @@ class PodCreator:
             
             # Create temporary file
             temp_file = f"/tmp/pod-{pod_uuid}.yaml"
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                yaml.dump(pod_template, f, default_flow_style=False)
             
-            # Use ccictl to create Pod
-            cmd = f"/usr/local/bin/ccictl apply -f {temp_file}"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-            
-            # Clean up temporary file
-            try:
-                os.remove(temp_file)
-            except:
-                pass
-            
-            if result.returncode == 0:
-                logger.info(f"Successfully created Pod: {pod_name} (Task: {task_name}, ConfigMap: {configmap_name})")
-                print(f"Pod created successfully: {pod_name}")
-                return True
-            else:
-                logger.error(f"Failed to create Pod: {result.stderr}")
-                print(f"Pod creation failed: {result.stderr}")
+            if not safe_yaml_dump(pod_template, temp_file):
+                logger.error(f"Failed to create temporary Pod definition file: {temp_file}")
                 return False
+            
+            try:
+                # Use ccictl to create Pod
+                cmd = get_ccictl_command(f"apply -f {temp_file}")
+                success, stdout, stderr = execute_command_with_retry(cmd, timeout=60, max_retries=3)
+                
+                if success:
+                    logger.info(f"Successfully created Pod: {pod_name} (Task: {task_name}, ConfigMap: {configmap_name})")
+                    print(f"Pod created successfully: {pod_name}")
+                    return True
+                else:
+                    logger.error(f"Failed to create Pod: {stderr}")
+                    print(f"Pod creation failed: {stderr}")
+                    return False
+            finally:
+                # Clean up temporary file
+                cleanup_temp_file(temp_file)
                 
         except Exception as e:
             logger.error(f"Error occurred while creating Pod: {e}")

@@ -6,13 +6,17 @@ Declarative configuration mode driven by ConfigMap, implementing containerized o
 
 import os
 import time
-import yaml
 import subprocess
 from typing import Dict, List, Optional
 from crontab import CronTab
 from pod_cleaner import PodCleaner
 from cci_auth_manager import CCIAuthManager
 from logger_config import setup_logger
+from utils import (
+    safe_yaml_load, 
+    execute_command_with_retry,
+    get_ccictl_command
+)
 
 # Set up logger
 logger = setup_logger('CronDispatcher', '/var/log/cron-dispatcher/dispatcher.log')
@@ -77,7 +81,9 @@ class CronDispatcher:
                 return None
             
             with open(self.tasks_config_file, 'r', encoding='utf-8') as f:
-                tasks = yaml.safe_load(f)
+                yaml_content = f.read()
+            
+            tasks = safe_yaml_load(yaml_content, f"tasks config file: {self.tasks_config_file}")
             
             if not tasks:
                 logger.warning("No tasks found in configuration file")
@@ -112,7 +118,9 @@ class CronDispatcher:
                 return default_policy
             
             with open(self.gc_policy_file, 'r', encoding='utf-8') as f:
-                policy = yaml.safe_load(f)
+                yaml_content = f.read()
+            
+            policy = safe_yaml_load(yaml_content, f"GC policy file: {self.gc_policy_file}")
             
             if policy:
                 logger.info(f"Successfully loaded garbage collection policy from {self.gc_policy_file}")
@@ -190,14 +198,14 @@ class CronDispatcher:
     def validate_configmap_exists(self, configmap_name: str) -> bool:
         """Validate that the specified ConfigMap exists in the current namespace"""
         try:
-            cmd = f"ccictl get configmap {configmap_name} -n {self.namespace}"
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            cmd = get_ccictl_command(f"get configmap {configmap_name}", self.namespace)
+            success, stdout, stderr = execute_command_with_retry(cmd, timeout=10, max_retries=2)
             
-            if result.returncode == 0:
+            if success:
                 logger.debug(f"ConfigMap {configmap_name} exists in namespace {self.namespace}")
                 return True
             else:
-                logger.warning(f"ConfigMap {configmap_name} not found in namespace {self.namespace}")
+                logger.warning(f"ConfigMap {configmap_name} not found in namespace {self.namespace}: {stderr}")
                 return False
                 
         except Exception as e:
@@ -292,27 +300,30 @@ class CronDispatcher:
     def _parse_interval_to_seconds(self, interval_str: str) -> int:
         """Parse time interval string to seconds"""
         try:
-            interval_str = interval_str.strip()
+            if not interval_str:
+                return 300
+                
+            interval_str = str(interval_str).strip()
             
             # If it's just a number, treat as seconds
             if interval_str.isdigit():
-                return int(interval_str)
+                return max(1, int(interval_str))
             
             # Parse with unit
             if interval_str.endswith('s'):
-                return int(interval_str[:-1])
+                return max(1, int(interval_str[:-1]))
             elif interval_str.endswith('m'):
-                return int(interval_str[:-1]) * 60
+                return max(60, int(interval_str[:-1]) * 60)
             elif interval_str.endswith('h'):
-                return int(interval_str[:-1]) * 3600
+                return max(3600, int(interval_str[:-1]) * 3600)
             elif interval_str.endswith('d'):
-                return int(interval_str[:-1]) * 86400
+                return max(86400, int(interval_str[:-1]) * 86400)
             else:
                 # Try to parse as number
-                return int(interval_str)
+                return max(1, int(interval_str))
                 
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid interval format: {interval_str}, using default 300 seconds")
+        except Exception as e:
+            logger.warning(f"Invalid interval format: {interval_str}, using default 300 seconds: {e}")
             return 300
     
     def update_cleanup_interval(self, gc_policy: Dict):

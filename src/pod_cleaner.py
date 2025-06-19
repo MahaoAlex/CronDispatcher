@@ -3,11 +3,15 @@
 Pod Cleaner - Responsible for garbage collection and cleanup of cron-dispatcher managed Pods
 """
 import time
-import yaml
 import subprocess
 import json
 from typing import Dict, List
 from logger_config import setup_logger
+from utils import (
+    safe_yaml_load,
+    execute_command_with_retry,
+    get_ccictl_command
+)
 
 # Set up logger
 logger = setup_logger('PodCleaner', '/var/log/cron-dispatcher/pod-cleaner.log')
@@ -29,17 +33,16 @@ class PodCleaner:
             logger.info(f"Starting cleanup with policy: {gc_policy}")
             
             # Get Pods managed by cron-dispatcher using ccictl
-            cmd = f"/usr/local/bin/ccictl get pods -n {self.namespace} -l app.kubernetes.io/managed-by=cron-dispatcher -o yaml"
-            logger.debug(f"Executing command: {cmd}")
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            cmd = get_ccictl_command("get pods -l app.kubernetes.io/managed-by=cron-dispatcher -o yaml", self.namespace)
+            success, stdout, stderr = execute_command_with_retry(cmd, timeout=30, max_retries=3)
             
-            if result.returncode != 0:
-                logger.warning(f"Failed to get pods for garbage collection: {result.stderr}")
+            if not success:
+                logger.warning(f"Failed to get pods for garbage collection: {stderr}")
                 return 0
             
             # Parse pod list
             try:
-                pod_list = yaml.safe_load(result.stdout)
+                pod_list = safe_yaml_load(stdout, "Pod list from ccictl")
                 if not pod_list or 'items' not in pod_list:
                     logger.info("No pods found for garbage collection")
                     return 0
@@ -190,52 +193,15 @@ class PodCleaner:
     def _delete_pod(self, pod_name: str, pod_namespace: str, reason: str) -> bool:
         """Delete Pod using ccictl"""
         try:
-            cmd = f"/usr/local/bin/ccictl delete pod {pod_name} -n {pod_namespace}"
-            logger.debug(f"Executing command: {cmd}")
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            cmd = get_ccictl_command(f"delete pod {pod_name}", pod_namespace)
+            success, stdout, stderr = execute_command_with_retry(cmd, timeout=30, max_retries=2)
             
-            if result.returncode == 0:
+            if success:
                 logger.info(f"Deleted Pod {pod_name}: {reason}")
                 return True
             else:
-                logger.error(f"Failed to delete Pod {pod_name}: {result.stderr}")
+                logger.error(f"Failed to delete Pod {pod_name}: {stderr}")
                 return False
         except Exception as e:
             logger.error(f"Failed to delete Pod {pod_name}: {e}", exc_info=True)
             return False
-
-    def get_pods_by_labels(self, label_selector: Dict) -> List[Dict]:
-        """Get Pods by label selector"""
-        try:
-            # Build label selector string
-            match_labels = label_selector.get('matchLabels', {})
-            label_parts = [f"{key}={value}" for key, value in match_labels.items()]
-            label_string = ','.join(label_parts)
-            
-            if not label_string:
-                logger.warning("No label selector provided, skipping Pod query")
-                return []
-            
-            # Use ccictl to get Pods
-            cmd = f"/usr/local/bin/ccictl get pods -n {self.namespace} -l {label_string} -o json"
-            logger.debug(f"Executing command: {cmd}")
-            result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-            
-            if result.returncode != 0:
-                logger.error(f"Failed to get Pods: {result.stderr}")
-                return []
-            
-            # Parse JSON response
-            pods_data = json.loads(result.stdout)
-            pods = pods_data.get('items', [])
-            
-            logger.info(f"Found {len(pods)} Pods matching label selector in namespace {self.namespace}")
-            logger.debug(f"Label selector: {label_string}")
-            return pods
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Pods JSON response: {e}", exc_info=True)
-            return []
-        except Exception as e:
-            logger.error(f"Error getting Pods by labels: {e}", exc_info=True)
-            return [] 

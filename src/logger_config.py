@@ -54,4 +54,4 @@ def setup_logger(name: str, log_file: str = None, level: int = logging.INFO) -> 
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     
-    return logger 
+    return logger

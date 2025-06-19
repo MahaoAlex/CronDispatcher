@@ -6,8 +6,9 @@ Manages CCI credentials and configures ccictl authentication
 
 import os
 import subprocess
-from typing import Dict
+from typing import Dict, List
 from logger_config import setup_logger
+from utils import execute_command_with_retry
 
 # Set up logger
 logger = setup_logger('CCIAuthManager', '/var/log/cron-dispatcher/cci-auth.log')
@@ -121,55 +122,19 @@ class CCIAuthManager:
         logger.info("Successfully configured ccictl authentication")
         return True
     
-    def _execute_command(self, cmd: list, operation: str) -> bool:
+    def _execute_command(self, cmd: List[str], operation: str) -> bool:
         """Execute a single ccictl command"""
         try:
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True)
-            logger.debug("CCI {}: {}".format(operation, result.stdout.strip()))
-            return True
-        except subprocess.CalledProcessError as e:
-            logger.error("Failed to {}: {}".format(operation, e.stderr))
-            return False
-    
-    def test_authentication(self) -> bool:
-        """
-        Test CCI authentication by listing namespaces
-        
-        Returns:
-            bool: True if authentication successful, False otherwise
-        """
-        try:
-            result = subprocess.run(
-                ['ccictl', 'get', 'namespaces'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                check=True
-            )
-            logger.info("CCI authentication test successful")
-            logger.debug("Available namespaces: {}".format(result.stdout.strip()))
-            return True
+            cmd_str = ' '.join(cmd)
+            success, stdout, stderr = execute_command_with_retry(cmd_str, timeout=30, max_retries=2, shell=False)
             
-        except subprocess.CalledProcessError as e:
-            logger.error("CCI authentication test failed: {}".format(e.stderr))
-            return False
+            if success:
+                logger.debug("CCI {}: {}".format(operation, stdout.strip()))
+                return True
+            else:
+                logger.error("Failed to {}: {}".format(operation, stderr))
+                return False
         except Exception as e:
-            logger.error("Error testing CCI authentication: {}".format(e))
+            logger.error("Error executing CCI command {}: {}".format(operation, e))
             return False
     
-    def get_credentials_info(self) -> Dict[str, str]:
-        """
-        Get non-sensitive credentials information for logging
-        
-        Returns:
-            Dict with non-sensitive credential info
-        """
-        if not self.credentials:
-            return {}
-        
-        return {
-            'domain_name': self.credentials.get('domain_name', 'Not set'),
-            'project_name': self.credentials.get('project_name', 'Not set'),
-            'has_access_key': bool(self.credentials.get('access_key')),
-            'has_secret_key': bool(self.credentials.get('secret_key'))
-        } 
