@@ -124,8 +124,7 @@ class CCIAuthManager:
     def _execute_command(self, cmd: List[str], operation: str) -> bool:
         """Execute a single ccictl command"""
         try:
-            cmd_str = ' '.join(cmd)
-            success, stdout, stderr = execute_command_with_retry(cmd_str, timeout=30, max_retries=2, shell=False)
+            success, stdout, stderr = execute_command_with_retry(cmd, timeout=30, max_retries=2, shell=False)
             
             if success:
                 logger.debug("CCI {}: {}".format(operation, stdout.strip()))

@@ -8,13 +8,13 @@ import os
 import time
 import yaml
 import subprocess
-from typing import Dict, Optional, Any, Tuple
+from typing import Dict, Optional, Any, Tuple, List, Union
 from logger_config import setup_logger
 
 logger = setup_logger('Utils', '/var/log/cron-dispatcher/utils.log')
 
 def execute_command_with_retry(
-    cmd: str, 
+    cmd: Union[str, List[str]], 
     timeout: int = 30, 
     max_retries: int = 3, 
     retry_delay: int = 1,
@@ -35,7 +35,8 @@ def execute_command_with_retry(
     """
     for attempt in range(max_retries + 1):
         try:
-            logger.debug(f"Executing command (attempt {attempt + 1}): {cmd}")
+            cmd_for_log = ' '.join(cmd) if isinstance(cmd, list) else cmd
+            logger.debug(f"Executing command (attempt {attempt + 1}): {cmd_for_log}")
             result = subprocess.run(
                 cmd, 
                 shell=shell, 
@@ -46,20 +47,21 @@ def execute_command_with_retry(
             )
             
             if result.returncode == 0:
-                logger.debug(f"Command executed successfully: {cmd}")
+                logger.debug(f"Command executed successfully: {cmd_for_log}")
                 return True, result.stdout, result.stderr
             else:
-                logger.warning(f"Command failed (attempt {attempt + 1}): {cmd}, stderr: {result.stderr}")
+                logger.warning(f"Command failed (attempt {attempt + 1}): {cmd_for_log}, stderr: {result.stderr}")
                 
         except Exception as e:
-            logger.warning(f"Command execution error (attempt {attempt + 1}): {cmd}, error: {e}")
+            logger.warning(f"Command execution error (attempt {attempt + 1}): {cmd_for_log}, error: {e}")
         
         # Wait before retry (except for the last attempt)
         if attempt < max_retries:
             logger.debug(f"Retrying in {retry_delay} seconds...")
             time.sleep(retry_delay)
     
-    logger.error(f"Command failed after {max_retries + 1} attempts: {cmd}")
+    cmd_for_log = ' '.join(cmd) if isinstance(cmd, list) else cmd
+    logger.error(f"Command failed after {max_retries + 1} attempts: {cmd_for_log}")
     return False, "", f"Command failed after {max_retries + 1} attempts"
 
 def safe_yaml_load(yaml_string: str, source: str = "unknown") -> any:
