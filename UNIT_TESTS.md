@@ -18,10 +18,10 @@ pip install -r requirements.txt
 ### Run All Unit Tests
 ```bash
 # Using the custom test runner (recommended)
-python tests/test_runner.py
+python3 tests/test_runner.py
 
 # Using unittest discover
-python -m unittest discover -s tests -p "test_*.py" -v
+python3 -m unittest discover -s tests -p "test_*.py" -v
 
 # Using pytest (if installed)
 pytest tests/ -v
@@ -46,28 +46,28 @@ The unit tests are organized into the following main categories:
 ### By Test Category
 ```bash
 # Logger config tests
-python -m unittest tests.test_logger_config -v
+python3 -m unittest tests.test_logger_config -v
 
 # Utility functions tests
-python -m unittest tests.test_utils -v
+python3 -m unittest tests.test_utils -v
 
 # CCI Auth Manager tests
-python -m unittest tests.test_cci_auth_manager -v
+python3 -m unittest tests.test_cci_auth_manager -v
 
 # Pod Creator tests
-python -m unittest tests.test_pod_creator -v
+python3 -m unittest tests.test_pod_creator -v
 
 # Pod Cleaner tests
-python -m unittest tests.test_pod_cleaner -v
+python3 -m unittest tests.test_pod_cleaner -v
 
 # Main dispatcher logic tests
-python -m unittest tests.test_main -v
+python3 -m unittest tests.test_main -v
 ```
 
 ### Individual Test Cases
 ```bash
 # Run a specific test method
-python -m unittest tests.test_utils.TestUtils.test_execute_command_success -v
+python3 -m unittest tests.test_utils.TestUtils.test_execute_command_success -v
 ```
 
 ## Test Coverage
@@ -144,10 +144,10 @@ def test_tc_X_Y_description(self):
 ### Verbose Output
 ```bash
 # Run with maximum verbosity
-python -m unittest tests.test_configuration_loading -v
+python3 -m unittest tests.test_configuration_loading -v
 
 # Debug specific test failures
-python -m unittest tests.test_configuration_loading.TestConfigurationLoading.test_tc_1_1_valid_task_configuration_loading
+python3 -m unittest tests.test_configuration_loading.TestConfigurationLoading.test_tc_1_1_valid_task_configuration_loading
 ```
 
 ### Common Issues
@@ -180,7 +180,7 @@ The unit tests are designed for easy CI/CD integration:
 - name: Run Unit Tests
   run: |
     pip install -r requirements.txt
-    python tests/test_runner.py
+    python3 tests/test_runner.py
     
 - name: Generate Coverage Report
   run: |

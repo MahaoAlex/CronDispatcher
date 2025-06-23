@@ -70,5 +70,5 @@ def run_tests():
 
 if __name__ == '__main__':
     # Add the parent directory ('CronDispatcher') to the path to find the 'src' module
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
     sys.exit(run_tests()) 

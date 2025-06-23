@@ -48,7 +48,7 @@ Jenkinsfile
 # Test files
 test_*.py
 *_test.py
-tests/
+# tests/  # Commented out to allow tests directory for Docker builds
 
 # Development files
 .env

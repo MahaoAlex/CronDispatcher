@@ -17,7 +17,7 @@ This document provides a comprehensive testing guide for the cron-dispatcher pro
 | `tests/test_pod_cleaner.py` | `src/pod_cleaner.py` | Checks garbage collection logic for completed/expired Pods. |
 | `tests/test_main.py` | `src/main.py` | End-to-end tests for the main dispatcher, covering task processing, scheduling, and configuration reloading. |
 
-**Execution Commands**: `python tests/test_runner.py` (all) | `python -m unittest tests.test_category -v` (single category)
+**Execution Commands**: `python3 tests/test_runner.py` (all) | `python3 -m unittest tests.test_category -v` (single category)
 
 ### Test Case Statistics
 

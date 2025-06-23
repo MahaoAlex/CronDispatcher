@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 import yaml
 
 # Add src directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from pod_creator import PodCreator
 
@@ -175,12 +175,12 @@ class TestPodCreator(unittest.TestCase):
         """Test main function with incorrect arguments"""
         mock_sys.argv = ['pod_creator.py']
         mock_sys.exit.side_effect = lambda code: __import__('sys').exit(code)
-        with patch('builtins.print') as mock_print:
+        with patch('pod_creator.logger') as mock_logger:
             from pod_creator import main
             with self.assertRaises(SystemExit) as e:
                 main()
             self.assertEqual(e.exception.args[0], 1)
-            mock_print.assert_called_once_with("Usage: python3 pod_creator.py <task_name> <configmap_name>")
+            mock_logger.error.assert_called_once_with("Usage: python3 pod_creator.py <task_name> <configmap_name>")
             mock_sys.exit.assert_called_once_with(1)
 
 if __name__ == '__main__':

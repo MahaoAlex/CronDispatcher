@@ -1,0 +1,38 @@
+# Base image - same as main Dockerfile
+FROM centos:8
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV LANG=C.UTF-8
+
+# Update package manager and install necessary packages (minimal approach)
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \
+    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-* && \
+    yum install -y python3 python3-pip cronie curl unzip && \
+    yum clean all && \
+    rm -rf /var/cache/yum
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+COPY tests/unit/requirements-ut.txt ./tests/unit/requirements-ut.txt
+RUN pip3 install --no-cache-dir -r requirements.txt && \
+    pip3 install --no-cache-dir -r tests/unit/requirements-ut.txt
+
+# Copy source code and tests
+COPY src ./src
+COPY tests/unit ./tests/unit
+
+# Copy and set up the test runner script
+COPY scripts/run_unit_tests.sh /app/
+RUN chmod +x /app/run_unit_tests.sh
+
+# Create necessary directories for crontab
+RUN mkdir -p /var/spool/cron && \
+    touch /var/spool/cron/root && \
+    chmod 600 /var/spool/cron/root
+
+# Set the entrypoint to run tests
+ENTRYPOINT ["/app/run_unit_tests.sh"] 

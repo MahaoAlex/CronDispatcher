@@ -4,6 +4,11 @@
 
 set -e
 
+# Logging function
+log_info() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ProcessManager - INFO - $1"
+}
+
 # PID files
 CROND_PID_FILE="/var/run/crond.pid"
 MAIN_APP_PID_FILE="/var/run/cron-dispatcher.pid"
@@ -21,7 +26,7 @@ RUN mkdir -p /var/log/cron-dispatcher && \
 
 # Function to start crond
 start_crond() {
-    echo "Starting crond service..."
+    log_info "Starting crond service..."
     
     # Ensure cron spool directory exists
     mkdir -p /var/spool/cron
@@ -29,6 +34,7 @@ start_crond() {
     chmod 600 /var/spool/cron/root
     
     # Export environment variables to cron environment
+    log_info "Exporting environment variables to /etc/cron.d/cron-env"
     {
         echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         echo "SHELL=/bin/bash"
@@ -39,6 +45,7 @@ start_crond() {
     } > /etc/cron.d/cron-env
     
     # Create a wrapper script to source environment and run the command
+    log_info "Creating cron job wrapper at /usr/local/bin/run_cron_job.sh"
     cat > /usr/local/bin/run_cron_job.sh << 'EOF'
 #!/bin/bash
 # Source environment variables
@@ -63,22 +70,23 @@ EOF
     # Verify crond is running
     if kill -0 $crond_pid 2>/dev/null; then
         echo $crond_pid > $CROND_PID_FILE
-        echo "[PASS] crond started successfully (PID: $crond_pid)"
+        log_info "[PASS] crond started successfully (PID: $crond_pid)"
         # Display crond process details
-        ps -f -p $crond_pid
+        log_info "crond process details:"
+        ps -f -p $crond_pid | while IFS= read -r line; do log_info "  $line"; done
         # Display cron jobs
-        echo "Current cron jobs:"
-        crontab -l
+        log_info "Current cron jobs:"
+        crontab -l | while IFS= read -r line; do log_info "  $line"; done
         return 0
     else
-        echo "[FAIL] crond failed to start"
+        log_info "[FAIL] crond failed to start"
         return 1
     fi
 }
 
 # Function to start main application
 start_main_app() {
-    echo "Starting cron-dispatcher main application..."
+    log_info "Starting cron-dispatcher main application..."
     
     # Ensure log directory exists
     mkdir -p /var/log/cron-dispatcher
@@ -93,10 +101,10 @@ start_main_app() {
     # Verify main application is running
     if kill -0 $main_pid 2>/dev/null; then
         echo $main_pid > $MAIN_APP_PID_FILE
-        echo "[PASS] cron-dispatcher main application started successfully (PID: $main_pid)"
+        log_info "[PASS] cron-dispatcher main application started successfully (PID: $main_pid)"
         return 0
     else
-        echo "[FAIL] cron-dispatcher main application failed to start"
+        log_info "[FAIL] cron-dispatcher main application failed to start"
         return 1
     fi
 }
@@ -121,7 +129,7 @@ stop_process() {
     if [ -f "$pid_file" ]; then
         local pid=$(cat "$pid_file" 2>/dev/null)
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            echo "Stopping $process_name (PID: $pid)..."
+            log_info "Stopping $process_name (PID: $pid)..."
             kill -TERM "$pid"
             
             # Wait for graceful shutdown
@@ -133,12 +141,12 @@ stop_process() {
             
             # Force kill if still running
             if kill -0 "$pid" 2>/dev/null; then
-                echo "Force killing $process_name (PID: $pid)..."
+                log_info "Force killing $process_name (PID: $pid)..."
                 kill -KILL "$pid"
             fi
             
             rm -f "$pid_file"
-            echo "$process_name stopped"
+            log_info "$process_name stopped"
         fi
     fi
 }
@@ -157,7 +165,7 @@ restart_process() {
             start_main_app
             ;;
         *)
-            echo "Unknown process type: $process_type"
+            log_info "Unknown process type: $process_type"
             return 1
             ;;
     esac
@@ -168,13 +176,13 @@ monitor_processes() {
     while true; do
         # Check crond
         if ! is_process_running "$CROND_PID_FILE"; then
-            echo "[WARN] crond process not running, restarting..."
+            log_info "[WARN] crond process not running, restarting..."
             restart_process "crond"
         fi
         
         # Check main application
         if ! is_process_running "$MAIN_APP_PID_FILE"; then
-            echo "[WARN] main application process not running, restarting..."
+            log_info "[WARN] main application process not running, restarting..."
             restart_process "main"
         fi
         
@@ -185,7 +193,7 @@ monitor_processes() {
 
 # Signal handlers
 cleanup() {
-    echo "Received shutdown signal, cleaning up..."
+    log_info "Received shutdown signal, cleaning up..."
     stop_process "$MAIN_APP_PID_FILE" "main application"
     stop_process "$CROND_PID_FILE" "crond"
     exit 0
@@ -197,7 +205,7 @@ trap cleanup SIGTERM SIGINT
 # Main execution
 case "${1:-start}" in
     "start")
-        echo "=== cron-dispatcher Process Manager ==="
+        log_info "=== cron-dispatcher Process Manager ==="
         
         # Start crond
         if ! start_crond; then
@@ -209,8 +217,8 @@ case "${1:-start}" in
             exit 1
         fi
         
-        echo "=== All processes started successfully ==="
-        echo "Monitoring processes..."
+        log_info "=== All processes started successfully ==="
+        log_info "Monitoring processes..."
         
         # Monitor processes
         monitor_processes
@@ -224,23 +232,23 @@ case "${1:-start}" in
         restart_process "main"
         ;;
     "status")
-        echo "=== Process Status ==="
+        log_info "=== Process Status ==="
         if is_process_running "$CROND_PID_FILE"; then
             local crond_pid=$(cat "$CROND_PID_FILE")
-            echo "[PASS] crond is running (PID: $crond_pid)"
+            log_info "[PASS] crond is running (PID: $crond_pid)"
         else
-            echo "[FAIL] crond is not running"
+            log_info "[FAIL] crond is not running"
         fi
         
         if is_process_running "$MAIN_APP_PID_FILE"; then
             local main_pid=$(cat "$MAIN_APP_PID_FILE")
-            echo "[PASS] main application is running (PID: $main_pid)"
+            log_info "[PASS] main application is running (PID: $main_pid)"
         else
-            echo "[FAIL] main application is not running"
+            log_info "[FAIL] main application is not running"
         fi
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status}"
+        log_info "Usage: $0 {start|stop|restart|status}"
         exit 1
         ;;
 esac 

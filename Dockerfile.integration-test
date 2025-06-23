@@ -1,0 +1,42 @@
+# Base image - same as main Dockerfile
+FROM centos:8
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV LANG=C.UTF-8
+
+# Update package manager and install necessary packages (minimal approach)
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \
+    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-* && \
+    yum install -y python3 python3-pip cronie curl unzip && \
+    yum clean all && \
+    rm -rf /var/cache/yum
+
+# Download and install ccictl tool (consistent with main Dockerfile)
+RUN curl -L -o /usr/local/bin/ccictl "https://cci-cn-south-4.obs.cn-south-4.myhuaweicloud.com/ccictl/ccictl" && \
+    chmod +x /usr/local/bin/ccictl
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+COPY tests/integration/requirements-it.txt ./tests/integration/requirements-it.txt
+RUN pip3 install --no-cache-dir -r requirements.txt && \
+    pip3 install --no-cache-dir -r tests/integration/requirements-it.txt
+
+# Copy source code and tests
+COPY src ./src
+COPY tests/integration ./tests/integration
+
+# Copy and set up the test runner script
+COPY scripts/run_integration_tests.sh /app/
+RUN chmod +x /app/run_integration_tests.sh
+
+# Create necessary directories for crontab
+RUN mkdir -p /var/spool/cron && \
+    touch /var/spool/cron/root && \
+    chmod 600 /var/spool/cron/root
+
+# Set the entrypoint to run tests
+ENTRYPOINT ["/app/run_integration_tests.sh"] 

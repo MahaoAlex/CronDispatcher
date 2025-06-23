@@ -122,25 +122,22 @@ class PodCreator:
                 
                 if success:
                     logger.info(f"Successfully created Pod: {pod_name} (Task: {task_name}, ConfigMap: {configmap_name})")
-                    print(f"Pod created successfully: {pod_name}")
                     return True
                 else:
                     logger.error(f"Failed to create Pod: {stderr}")
-                    print(f"Pod creation failed: {stderr}")
                     return False
             finally:
                 # Clean up temporary file
                 cleanup_temp_file(temp_file)
                 
         except Exception as e:
-            logger.error(f"Error occurred while creating Pod: {e}")
-            print(f"Error occurred while creating Pod: {e}")
+            logger.error(f"Error occurred while creating Pod: {e}", exc_info=True)
             return False
 
 def main():
     """Main function"""
     if len(sys.argv) != 3:
-        print("Usage: python3 pod_creator.py <task_name> <configmap_name>")
+        logger.error("Usage: python3 pod_creator.py <task_name> <configmap_name>")
         sys.exit(1)
     
     task_name = sys.argv[1]

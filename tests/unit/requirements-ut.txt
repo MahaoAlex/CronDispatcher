@@ -1,0 +1,9 @@
+# Testing requirements for CronDispatcher unit tests
+unittest-xml-reporting==3.1.0
+coverage==6.2
+mock==5.1.0
+pytest>=7.0.1
+pytest-cov>=4.0.0
+pytest-mock>=3.6.1
+croniter==1.4.1
+parameterized>=0.8.1

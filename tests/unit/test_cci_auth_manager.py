@@ -9,7 +9,7 @@ import sys
 from unittest.mock import patch, MagicMock
 
 # Add src directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from cci_auth_manager import CCIAuthManager
 

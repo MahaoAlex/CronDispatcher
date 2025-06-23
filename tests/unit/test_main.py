@@ -5,7 +5,7 @@ import time
 from unittest.mock import patch, MagicMock, call
 
 # Add src directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src'))
 
 # We must patch setup_logger here, where it's defined, before main imports it.
 with patch('logger_config.setup_logger'):
@@ -127,8 +127,8 @@ class TestCronDispatcherMain(unittest.TestCase):
         """Test successful loading of task configuration"""
         tasks = self.dispatcher.load_tasks_config_from_file()
         self.assertIsNotNone(tasks)
-        self.assertEqual(mock_exists.call_count, 2)
-        mock_exists.assert_any_call(self.dispatcher.tasks_config_file)
+        self.assertEqual(mock_exists.call_count, 1)
+        mock_exists.assert_called_once_with(self.dispatcher.tasks_config_file)
         mock_open.assert_called_once_with(self.dispatcher.tasks_config_file, 'r', encoding='utf-8')
 
     @patch('main.os.path.exists', return_value=False)
@@ -263,28 +263,27 @@ class TestCronDispatcherMain(unittest.TestCase):
         
     def test_run_main_loop_with_config_changes(self):
         """Test the main run loop with configuration changes"""
-        with patch.multiple(
-            'main.CronDispatcher',
-            watch_tasks_config_change=MagicMock(side_effect=[True, False, False]),
-            watch_gc_policy_change=MagicMock(side_effect=[False, True, False]),
-            load_tasks_config_from_file=MagicMock(return_value=[self.valid_task]),
-            update_crontab=MagicMock(),
-            load_gc_policy_from_file=MagicMock(return_value={'cleanupInterval': '1h'}),
-            update_cleanup_interval=MagicMock(),
-            _run_cleanup=MagicMock(),
-            initialize_cci_authentication=MagicMock(return_value=True),
-            _load_and_apply_config=MagicMock()
-        ), patch('main.time.sleep', side_effect=[None, None, KeyboardInterrupt()]):
+        # Mock the instance methods directly instead of the class
+        with patch.object(self.dispatcher, 'watch_tasks_config_change', side_effect=[True, False, False]), \
+             patch.object(self.dispatcher, 'watch_gc_policy_change', side_effect=[False, True, False]), \
+             patch.object(self.dispatcher, 'load_tasks_config_from_file', return_value=[self.valid_task]), \
+             patch.object(self.dispatcher, 'update_crontab'), \
+             patch.object(self.dispatcher, 'load_gc_policy_from_file', return_value={'cleanupInterval': '1h'}), \
+             patch.object(self.dispatcher, 'update_cleanup_interval'), \
+             patch.object(self.dispatcher, '_run_cleanup'), \
+             patch.object(self.dispatcher, 'initialize_cci_authentication', return_value=True), \
+             patch.object(self.dispatcher, '_load_and_apply_config'), \
+             patch('main.time.sleep', side_effect=[None, None, KeyboardInterrupt()]):
             
             self.dispatcher.run()
 
-            # Verify initial load is called once
+            # Verify initial load is called once during initialization
             self.dispatcher._load_and_apply_config.assert_called_once()
             
-            # Verify tasks config is reloaded on first loop
+            # Verify tasks config is reloaded on first loop iteration
             self.dispatcher.update_crontab.assert_called_once_with([self.valid_task])
             
-            # Verify gc policy is reloaded on second loop
+            # Verify gc policy is reloaded on second loop iteration
             self.dispatcher.update_cleanup_interval.assert_called_once_with({'cleanupInterval': '1h'})
 
     @patch('main.os.path.exists', return_value=True)
