@@ -46,9 +46,10 @@ def setup_test_namespace():
     
     yield # This is where the tests will run
     
-    print(f"\n--- Tearing down test namespace: {TEST_NAMESPACE} ---")
-    cmd_delete = get_ccictl_command(f"delete namespace {TEST_NAMESPACE} --wait=false")
-    execute_command_with_retry(cmd_delete, shell=True)
+    # NOTE: Teardown disabled for debugging - resources left for inspection
+    print(f"\n--- SKIPPING teardown for debugging - namespace {TEST_NAMESPACE} preserved ---")
+    # cmd_delete = get_ccictl_command(f"delete namespace {TEST_NAMESPACE} --wait=false")
+    # execute_command_with_retry(cmd_delete, shell=True)
 
 
 @pytest.fixture
@@ -66,9 +67,10 @@ def pod_configmap():
     
     yield TEST_CONFIGMAP_NAME # Provide the ConfigMap name to the test
     
-    print(f"\n--- Deleting test ConfigMap: {TEST_CONFIGMAP_NAME} ---")
-    cmd_delete = get_ccictl_command(f"delete configmap {TEST_CONFIGMAP_NAME}", TEST_NAMESPACE)
-    execute_command_with_retry(cmd_delete, shell=True)
+    # NOTE: ConfigMap cleanup disabled for debugging - resources left for inspection
+    print(f"\n--- SKIPPING ConfigMap cleanup for debugging - {TEST_CONFIGMAP_NAME} preserved ---")
+    # cmd_delete = get_ccictl_command(f"delete configmap {TEST_CONFIGMAP_NAME}", TEST_NAMESPACE)
+    # execute_command_with_retry(cmd_delete, shell=True)
 
 
 # --- Integration Test Case ---
@@ -106,7 +108,7 @@ def test_successful_pod_creation(pod_configmap):
     pod_name = pod_list["items"][0]["metadata"]["name"]
     print(f"Successfully verified Pod '{pod_name}' exists.")
 
-    # Optional: Clean up the created pod immediately to be tidy
-    print(f"--- Cleaning up created Pod: {pod_name} ---")
-    cmd_delete_pod = get_ccictl_command(f"delete pod {pod_name}", TEST_NAMESPACE)
-    execute_command_with_retry(cmd_delete_pod, shell=True) 
+    # NOTE: Pod cleanup disabled for debugging - resources left for inspection  
+    print(f"--- SKIPPING Pod cleanup for debugging - {pod_name} preserved ---")
+    # cmd_delete_pod = get_ccictl_command(f"delete pod {pod_name}", TEST_NAMESPACE)
+    # execute_command_with_retry(cmd_delete_pod, shell=True) 
