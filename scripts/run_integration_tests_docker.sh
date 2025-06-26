@@ -24,12 +24,13 @@ fi
 echo ""
 echo "=== Running Integration Test Container ==="
 
-# 2. Run container to execute integration tests
+# 2. Run container to execute integration tests (detached for debugging)
 # Pass environment variables for CCI integration
 echo "Running container: ${CONTAINER_NAME}"
 echo "Note: Make sure CCI environment variables are set in your environment"
+echo "Container will remain running after tests for debugging purposes"
 
-docker run --name ${CONTAINER_NAME} \
+docker run -d --name ${CONTAINER_NAME} \
     -e CCI_ACCESS_KEY="${CCI_ACCESS_KEY}" \
     -e CCI_SECRET_KEY="${CCI_SECRET_KEY}" \
     -e CCI_DOMAIN_NAME="${CCI_DOMAIN_NAME}" \
@@ -37,6 +38,11 @@ docker run --name ${CONTAINER_NAME} \
     -e CCI_REGION="${CCI_REGION}" \
     -e NAMESPACE="${NAMESPACE:-cron-dispatcher-integration-test}" \
     ${IMAGE_NAME}:${TAG}
+
+echo "Container started. Waiting for tests to complete..."
+
+# Wait for container to finish running tests, but keep container alive
+docker wait ${CONTAINER_NAME}
 
 # Get container exit status
 EXIT_CODE=$?
@@ -48,6 +54,11 @@ if [ $EXIT_CODE -eq 0 ]; then
     echo "Integration Tests executed successfully"
 else
     echo "Integration Tests failed (exit code: $EXIT_CODE)"
+    echo ""
+    echo "DEBUGGING INFO:"
+    echo "Container ${CONTAINER_NAME} is still running for debugging"
+    echo "To enter the container: docker exec -it ${CONTAINER_NAME} /bin/bash"
+    echo "To view real-time logs: docker logs -f ${CONTAINER_NAME}"
 fi
 
 # 3. View container logs for detailed output

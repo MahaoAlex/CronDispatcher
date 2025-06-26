@@ -77,30 +77,38 @@ cleanup_cci_resources() {
         return 0
     fi
     
-    # Check for test namespace
-    TEST_NAMESPACE="cron-dispatcher-integration-test"
-    echo "Checking for test namespace: $TEST_NAMESPACE"
+    # Find all test namespaces (with random suffixes)
+    echo "Searching for integration test namespaces..."
+    TEST_NAMESPACES=$(ccictl get namespaces --no-headers 2>/dev/null | grep "cron-dispatcher-integration-test" | awk '{print $1}' || true)
     
-    if ccictl get namespace "$TEST_NAMESPACE" &> /dev/null; then
-        echo "Found test namespace: $TEST_NAMESPACE"
-        echo "This namespace may contain:"
-        echo "  - ConfigMaps"
-        echo "  - Pods"
-        echo "  - Other test resources"
-        echo ""
-        
-        read -p "Do you want to delete the test namespace '$TEST_NAMESPACE'? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "Deleting namespace: $TEST_NAMESPACE"
-            ccictl delete namespace "$TEST_NAMESPACE" --wait=false
-            echo "Namespace deletion initiated (may take a few moments to complete)."
-        else
-            echo "Skipping namespace cleanup."
-            echo "You can manually clean up with: ccictl delete namespace $TEST_NAMESPACE"
-        fi
+    if [ -z "$TEST_NAMESPACES" ]; then
+        echo "No integration test namespaces found."
+        return 0
+    fi
+    
+    echo "Found integration test namespaces:"
+    echo "$TEST_NAMESPACES"
+    echo ""
+    echo "These namespaces may contain:"
+    echo "  - ConfigMaps"
+    echo "  - Pods"
+    echo "  - Other test resources"
+    echo ""
+    
+    read -p "Do you want to delete ALL these test namespaces? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        for namespace in $TEST_NAMESPACES; do
+            echo "Deleting namespace: $namespace"
+            ccictl delete namespace "$namespace" --wait=false
+        done
+        echo "Namespace deletions initiated (may take a few moments to complete)."
     else
-        echo "No test namespace found."
+        echo "Skipping namespace cleanup."
+        echo "You can manually clean up with:"
+        for namespace in $TEST_NAMESPACES; do
+            echo "  ccictl delete namespace $namespace"
+        done
     fi
 }
 

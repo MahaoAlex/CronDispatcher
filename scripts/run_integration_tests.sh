@@ -48,6 +48,35 @@ echo "ccictl configuration completed successfully!"
 
 echo "--- Running Integration Tests ---"
 
+# Function to keep container alive for debugging (run in background)
+start_keep_alive_daemon() {
+    local exit_code=$1
+    
+    # Store test results for debugging
+    echo "TEST_EXIT_CODE=$exit_code" > /tmp/test_results.txt
+    echo "Test completed at: $(date)" >> /tmp/test_results.txt
+    
+    if [ $exit_code -ne 0 ]; then
+        echo "Tests failed! Starting background daemon to keep container alive for 1 hour"
+        # Start daemon process in background
+        nohup bash -c '
+            echo "Container daemon started at $(date)" >> /tmp/container_daemon.log
+            sleep 3600
+            echo "Container daemon expired at $(date)" >> /tmp/container_daemon.log
+        ' > /dev/null 2>&1 &
+        echo "Daemon PID: $!" > /tmp/daemon.pid
+    else
+        echo "Tests passed! Starting background daemon to keep container alive for 5 minutes"
+        # Start daemon process in background  
+        nohup bash -c '
+            echo "Container daemon started at $(date)" >> /tmp/container_daemon.log
+            sleep 300
+            echo "Container daemon expired at $(date)" >> /tmp/container_daemon.log
+        ' > /dev/null 2>&1 &
+        echo "Daemon PID: $!" > /tmp/daemon.pid
+    fi
+}
+
 # Set Python path to include the current directory for src module imports
 export PYTHONPATH="/app:$PYTHONPATH"
 echo "Python path: $PYTHONPATH"
@@ -73,5 +102,25 @@ ccictl config delete-user ${USER_NAME} 2>/dev/null || true
 
 echo "ccictl configuration cleanup completed"
 
-# Exit with the same code as the tests
+echo ""
+echo "=== Test Execution Complete ==="
+echo "Exit code: $TEST_EXIT_CODE"
+
+if [ $TEST_EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "Tests failed! Container will remain running for debugging."
+    echo "You can:"
+    echo "  - Check test results: cat /tmp/test_results.txt"
+    echo "  - Re-run tests: python3 -m pytest tests/integration -s -v"
+    echo "  - Check CCI connection: ccictl get namespaces"
+    echo "  - View environment: env | grep CCI"
+    echo "  - Check daemon status: cat /tmp/container_daemon.log"
+    echo "  - Exit container: exit"
+    echo ""
+fi
+
+# Start background daemon to keep container alive
+start_keep_alive_daemon $TEST_EXIT_CODE
+
+# Exit with the same code as the tests (main process exits, but daemon keeps container alive)
 exit $TEST_EXIT_CODE 

@@ -7,6 +7,8 @@ Verifies that the PodCreator can successfully create a Pod in a real CCI environ
 import os
 import time
 import json
+import random
+import string
 import pytest
 from src.pod_creator import PodCreator
 from src.utils import execute_command_with_retry, get_ccictl_command
@@ -18,10 +20,19 @@ pytestmark = pytest.mark.skipif(
     reason="CCI credentials (CCI_ACCESS_KEY) not set in environment."
 )
 
-# Use NAMESPACE from environment, fallback to default test namespace
-TEST_NAMESPACE = os.getenv("NAMESPACE", "cron-dispatcher-integration-test")
-TEST_TASK_NAME = "my-test-task"
-TEST_CONFIGMAP_NAME = "test-pod-def-configmap"
+# Generate random suffix for unique resource names
+RANDOM_SUFFIX = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+
+# Use NAMESPACE from environment, fallback to default test namespace with random suffix
+BASE_NAMESPACE = os.getenv("NAMESPACE", "cron-dispatcher-integration-test")
+TEST_NAMESPACE = f"{BASE_NAMESPACE}-{RANDOM_SUFFIX}"
+TEST_TASK_NAME = f"it-test-task-{RANDOM_SUFFIX}"
+TEST_CONFIGMAP_NAME = f"test-pod-def-configmap-{RANDOM_SUFFIX}"
+
+print(f"Test run ID: {RANDOM_SUFFIX}")
+print(f"Test namespace: {TEST_NAMESPACE}")
+print(f"Test task name: {TEST_TASK_NAME}")
+print(f"Test configmap name: {TEST_CONFIGMAP_NAME}")
 POD_YAML_CONTENT = """
 apiVersion: v1
 kind: Pod
