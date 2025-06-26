@@ -6,6 +6,7 @@ FROM centos:8
 ENV PYTHONUNBUFFERED=1
 ENV LANG=C.UTF-8
 ENV CRON_TIMEZONE=UTC
+ENV PYTHONPATH=/app/src
 
 # Update package manager and install necessary packages
 RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \

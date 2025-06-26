@@ -4,6 +4,7 @@ FROM centos:8
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV LANG=C.UTF-8
+ENV PYTHONPATH=/app/src
 
 # Update package manager and install necessary packages (minimal approach)
 RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \
