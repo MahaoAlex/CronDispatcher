@@ -52,10 +52,22 @@ spec:
 def setup_test_namespace():
     """Create and clean up the test namespace for all tests in this module."""
     print(f"\n--- Setting up test namespace: {TEST_NAMESPACE} ---")
+    
+    # Set environment variable to the correct namespace for PodCreator
+    original_namespace = os.environ.get('NAMESPACE')
+    os.environ['NAMESPACE'] = TEST_NAMESPACE
+    print(f"Updated NAMESPACE environment variable to: {TEST_NAMESPACE}")
+    
     cmd_create = get_ccictl_command(f"create namespace {TEST_NAMESPACE}")
     execute_command_with_retry(cmd_create, shell=True)
     
     yield # This is where the tests will run
+    
+    # Restore original namespace environment variable
+    if original_namespace is not None:
+        os.environ['NAMESPACE'] = original_namespace
+    else:
+        os.environ.pop('NAMESPACE', None)
     
     # NOTE: Teardown disabled for debugging - resources left for inspection
     print(f"\n--- SKIPPING teardown for debugging - namespace {TEST_NAMESPACE} preserved ---")
@@ -94,8 +106,14 @@ def test_successful_pod_creation(pod_configmap):
     """
     # 1. Arrange
     # The pod_configmap fixture has already created the necessary ConfigMap.
-    # The NAMESPACE should already be set from environment or default to TEST_NAMESPACE
+    # Verify namespace environment variable is set correctly
+    current_namespace = os.environ.get('NAMESPACE')
+    print(f"\n--- Current NAMESPACE environment variable: {current_namespace} ---")
+    print(f"--- Expected TEST_NAMESPACE: {TEST_NAMESPACE} ---")
+    assert current_namespace == TEST_NAMESPACE, f"NAMESPACE env var mismatch: {current_namespace} != {TEST_NAMESPACE}"
+    
     creator = PodCreator()
+    print(f"--- PodCreator initialized with namespace: {creator.namespace} ---")
 
     # 2. Act
     print(f"\n--- Attempting to create Pod for task: {TEST_TASK_NAME} ---")
