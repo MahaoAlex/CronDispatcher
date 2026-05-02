@@ -442,16 +442,37 @@ logconf.k8s.io/fluent-bit-log-type: lts
 
 ### 4.6 配置项和特性开关设计
 
-| 类型      | 开关                                | 默认         | 说明                                              |
-| --------- | ----------------------------------- | ------------ | ------------------------------------------------- |
-| 环境变量  | `GC_DRY_RUN`                        | `false`      | 干跑模式：不真正删除 Pod，只打印 `[DRY RUN]` 日志 |
-| 环境变量  | `GC_BATCH_SIZE`                     | `50`         | 每批删除 Pod 数量                                 |
-| ConfigMap | `tasks[].state`                     | `on`         | 单任务级开关，支持热切换 `on/off`                 |
-| ConfigMap | `gc-policy.cleanupInterval`         | `5m`         | 清理周期，热更新                                  |
-| ConfigMap | `gc-policy.global.success/failure`  | `3/3`        | 全局保留数                                        |
-| ConfigMap | `gc-policy.tasks[].success/failure` | 任务级保留数 |
+CronDispatcher 不引入运行时灰度（无 A/B 开关），所有配置经由两类来源生效：
 
-无运行时启用的特性灰度（无 A/B 开关），所有变更通过 ConfigMap apply 立即对全量任务生效。
+- **环境变量**：写在 `deployment.yaml` 的 `env` / `envFrom`，需要重启 Dispatcher Pod 才能生效；用于环境维度（命名空间、Region、时区、AK/SK）和稳定性兜底（GC dry-run、批量大小）。
+- **ConfigMap 字段**：`cron-dispatcher-config`（任务定义）与 `cron-dispatcher-gc-policy`（清理策略），通过 `ccictl apply` 修改后由主循环在 30s 内热加载，**无需重启 Pod**。
+
+下表「影响行为（含历史行为）」一栏：若该项首次引入即为当前形态，标注 **首版即此**；若曾发生过形态变更（来自仓库 git 历史或代码注释），简述前后差异并标注关联 commit。「同步清理的组件历史配置」描述变更生效后租户需要手动收敛的"残留物"，避免变更后系统中存在不一致状态。
+
+| 开关 / 配置项 | 影响行为（含历史行为） | 默认值 | 开启行为 | 关闭行为 | 配置方式 | 周边依赖 | 推荐配置 | 同步清理的组件历史配置 |
+|---------------|------------------------|--------|----------|----------|----------|----------|----------|------------------------|
+| `GC_DRY_RUN` | 控制 GC 是否真实删除 Pod。**首版即此**：作为上线前预演开关引入。 | `false` | `true`：仅打印 `[DRY RUN] Would delete pod <name>` 日志，不调用 `ccictl delete` | `false`：调用 `ccictl delete pod`，物理删除符合策略的 Pod | `deployment.yaml` 的 `env`，重启 Pod 生效 | `pod_cleaner.py`、ccictl `delete pod` 权限 | 生产稳态 `false`；变更 `gc-policy` 前临时开 `true` 走完一轮验证再回切 | 验证完成回切后，`/var/log/cron-dispatcher/main.log` 中残留的 `[DRY RUN]` 日志可保留观察 1 个 GC 周期后清理 |
+| `GC_BATCH_SIZE` | 单次 GC 调用 ccictl 的批量删除上限，节流瞬时 API 压力。**首版即此**：批间 `sleep 60s` 是配套常量，未做配置化。 | `50` | 任意正整数：按该数量一批删除，批与批之间固定 `sleep 60s` | `0` 或负数 / 非数字：`int()` 解析失败导致 Pod CrashLoop（无兜底逻辑） | `deployment.yaml` 的 `env`，重启 Pod 生效 | `pod_cleaner.py` 批删循环 | 单 Namespace Pod 总量 < 1000 时保持 `50`；超过 1000 调小到 `30` 并将 `cleanupInterval` 同步缩短 | 无 |
+| `tasks[].state` | 任务级软开关（`on/off`）。**历史行为**：早期解析存在大小写敏感缺陷（commit `8ca736e`: "make sure the cron task switch can be parsed correctly"），现版本统一小写比较。 | `on` | `on`：写入系统 crontab，按 `schedule` 周期触发 | `off`：从 crontab 中移除，任务定义保留在 ConfigMap，可随时切回 | ConfigMap `cron-dispatcher-config.tasks.yaml`，`ccictl apply` 后 30s 内生效 | 关联的 `<task>-template` ConfigMap 必须存在 | 故障期间临时停用使用 `off`；永久下线再删除整条任务并联动删除 template ConfigMap | `state=off` 仅停止新触发，已存在的 Pod 不会自动清理；如需立即回收：`ccictl delete pods -l cron-dispatcher.io/task-name=<task>` |
+| `tasks[].schedule` | 任务的 cron 表达式。**历史行为**：早期使用 `croniter` 库（commit `869580c`: "replace croniter lib"），现切换为 `python-crontab` 与系统 cronie 对齐，避免库与 crond 行为不一致。 | 无（必填） | 合法 5/6 段 cron：按规则触发；6 段 Quartz 中的秒位由 cronie 忽略 | 非法 cron：当条任务跳过，主循环日志记录解析错误，其它任务不受影响 | ConfigMap `cron-dispatcher-config.tasks.yaml`，热加载 30s 内生效 | 系统 `crond`（cronie 包） | 写入注释标注语义与时区；改动前用 `crontab.guru` 校验 | 修改 schedule 后旧周期产生的 Pod 由 GC 自然清理 |
+| `tasks[].podDefinitionConfigmap` | 指向业务 Pod 模板 ConfigMap 名称，其 `data.pod.yaml` 字段保存完整 Pod 定义。**首版即此**。 | 无（必填） | 引用名存在：每次触发先 `ccictl get configmap` 拉取模板，注入 UUID 与标签后 `apply` | 引用名不存在：触发失败，记录 ERROR，跳过本次（不影响其它任务） | ConfigMap `cron-dispatcher-config.tasks.yaml`，热加载 30s 内生效 | 对应 `<name>-template` ConfigMap | 命名规范 `<task>-template`，与任务名一一对应 | 删除任务后必须同步删除 `<name>-template` ConfigMap，否则成为孤儿配置 |
+| `gc-policy.cleanupInterval` | GC 周期。**首版即此**：通过 ConfigMap 暴露为可热更新字段，代码侧保留 5m 兜底。 | `60m`（YAML）；缺省时代码兜底 `5m` | 合法时间字符串（`30m`、`1h`、`6h`）：按该周期触发 | 非法格式：日志告警并按代码常量 `5m` 兜底，不影响主循环 | ConfigMap `cron-dispatcher-gc-policy.gc-policy.yaml`，30s 内热加载并立即触发一次 GC | `pod_cleaner.py` | Pod 量 < 200 保持 `60m`；Pod 量大或保留数低，调到 `30m`；不要短于 `5m`（小于代码强制下限） | 修改后无需手动清理；下次 GC 即按新周期执行 |
+| `gc-policy.global.success` / `gc-policy.global.failure` | 全局保留数：成功 / 失败 Pod 各自保留最近 N 个。**首版即此**：双字段拆分自服务首版。 | `3` / `3` | 正整数 N：按 `creationTimestamp` 倒序保留 N 个，超出删除 | `0`：清空所有该状态 Pod；`-1` 或非数字：`int()` 解析异常被主循环捕获，按上次有效策略继续 | ConfigMap `cron-dispatcher-gc-policy.yaml` | `pod_cleaner.py` 分组逻辑 | 失败保留 ≥ 1 以便排障；成功保留按 Namespace 配额裁剪 | 下次 GC 自然回收，无需手动清理 |
+| `gc-policy.tasks[].success` / `gc-policy.tasks[].failure` | 任务级保留数，覆盖 `global`。**首版即此**。 | 不配置（落入 `global`） | 显式整数：仅该任务采用此值 | 不配置或字段缺失：使用 `global` 默认 | ConfigMap `gc-policy.yaml` 的 `tasks` 数组，与 `tasks[].name` 严格匹配 | `pod_cleaner.py`、`tasks[].name` 命名一致性 | 仅对关键 / 长任务单独配置；非关键任务保持全局即可 | 删除任务级配置后由 global 接管，下次 GC 自动调整 |
+| `gc-policy.labelSelector.matchLabels` | GC 扫描 Pod 时使用的 label selector，决定哪些 Pod 纳入清理范围。**首版即此**。 | `app.kubernetes.io/managed-by: cron-dispatcher` | 任意 label：仅匹配的 Pod 纳入 GC | 留空：默认全 Namespace 扫描，**不推荐**（会回收非 Dispatcher 创建的 Pod） | ConfigMap `cron-dispatcher-gc-policy.yaml` | `pod_creator.py` 必须保证创建 Pod 时打齐这些 label | 与 `pod_creator.py` 注入 label 严格一致；新增 label 维度需先升级 `pod_creator.py` 再改 selector | 修改 selector 后旧 label 的 Pod 不再被回收，需手动清理：`ccictl delete pods -l <旧 label>` |
+| `NAMESPACE` | Dispatcher 工作的命名空间。**首版即此**：通过 Downward API 注入避免人工配错。 | 实际 Pod 所在 namespace（Downward API），代码兜底 `default` | Downward API：自动注入运行时 namespace | 显式覆盖：固定字符串值，会与 Pod 所在 namespace 解耦，仅用于本地调试 | `deployment.yaml` 的 `env` + `valueFrom.fieldRef: metadata.namespace` | k8s Downward API | 始终使用 Downward API，避免误配置导致跨 Namespace 操作 | 无 |
+| `CRON_TIMEZONE` | 系统 crond 时区，影响所有 cron 表达式触发时间。**历史行为**：早期 cron 子进程未继承主进程环境变量，导致 `TZ` 缺失触发偏移（commit `5839bb5`: "Inherit relevant environment variables from the main process environment to the Cron environment"），现已通过 `process_manager.sh` 注入。 | `UTC` | IANA 时区字符串（`Asia/Shanghai`、`Asia/Singapore` 等） | 为空或非法：crond 回退 UTC | `deployment.yaml` 的 `env`，重启 Pod 生效 | 镜像内 tzdata（CentOS 8 默认包含）；`process_manager.sh` 的环境变量注入逻辑 | 多区域同模板部署：统一 `UTC`，业务侧自行换算；单区域：本地时区 | 切换时区后 cron 触发时刻语义变化，建议在切换窗口先批量 `state=off`，校验后再 `on` |
+| `CCI_REGION` | ccictl 调用的 CCI API 域名拼接。**首版即此**。 | `af-south-1` | 合法 region 名（`cn-north-4`、`cn-south-4` 等） | 非法 region：ccictl 调用 DNS 失败，所有触发 / GC 失败但主进程不退出（liveness 探针可能告警） | `deployment.yaml` 的 `env`，重启生效 | DNS 可达 + VPCEP 配置（详见 README 网络章节） | 与租户实际 CCI 实例 region 严格一致；切换前先在新 region 创建 VPCEP 端点 | 切 region 后旧 region Pod 不再受管，需在旧 region 手动清理或停服迁移 |
+| `CCI_ACCESS_KEY` / `CCI_SECRET_KEY` / `CCI_DOMAIN_NAME` / `CCI_PROJECT_NAME` | IAM AK/SK 认证四元组。**历史行为**：早期 ccictl 配置存在认证失败问题（commit `f3a9bb7`: "fix ccictl auth error"），现由 `cci_auth_manager.py` 在容器启动时统一调用 `ccictl config set-credentials` 注入。 | 无（必填） | 全部正确：启动期配置 ccictl auth-provider；运行期所有 ccictl 命令携带 token | 任一缺失或错误：启动期日志 ERROR，liveness 探针失败 → Pod CrashLoop | `deployment.yaml` 的 `envFrom: secretRef: cci-credentials`（base64 编码） | IAM 用户需具备目标 Namespace 的 Pod / ConfigMap CRUD 权限 | 单 Dispatcher 一套独立 AK/SK；轮换时滚动更新 Secret 后 `ccictl rollout restart deployment cron-dispatcher` | 轮换后立即删除 Secret 旧版本（`ccictl delete secret cci-credentials-<old-version>`），避免残留泄露面 |
+
+**热更新与重启对照**
+
+| 类别 | 配置项 | 生效方式 | 时延 |
+|------|--------|----------|------|
+| ConfigMap 热更新 | `tasks[]` 全部字段、`gc-policy` 全部字段 | `ccictl apply` 后由主循环检测 | ≤ 30s |
+| 必须重启 Pod | 所有环境变量（`GC_DRY_RUN`、`GC_BATCH_SIZE`、`NAMESPACE`、`CRON_TIMEZONE`、`CCI_REGION`、`CCI_*` 凭证） | `ccictl rollout restart deployment cron-dispatcher` | 取决于 Pod 重启耗时（约 10–30s） |
+
+**灰度策略**：CronDispatcher 一律全量切换；如确需灰度，按 Namespace 维度部署独立 Dispatcher 实例分批升级，避免在单实例内引入运行时开关。
 
 ## 5. 性能
 
